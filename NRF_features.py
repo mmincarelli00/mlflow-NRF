@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Feature engineering for rogue / changed NF registrations and new NF-to-NF call edges.
 
-Unit of analysis: one row per (NF instance, 1-hour window).
+It turns the raw tables into the table the models learn from: one row per NF instance per hour, with the 14 selected features (16 columns) and the ground truth. 
+It writes nothing by default. It is mainly a library that train.py and test.py import
 
 The 14 selected features (items) -> 16 columns (items 5 and 10 each yield two columns):
 
@@ -28,6 +29,102 @@ Neutral values: windows without a registration/update event get "no unmatched ch
 
 `risk_matrix()` converts the raw columns into "higher = riskier" model inputs (flags inverted,
 counts log-scaled, time-to-first-traffic mapped to 1/(1+t/60)).
+
+
+Event tags E1-E9
+----------------
+E1-E9 are this project's own shorthand, not 3GPP names. Each maps to a 3GPP operation, except E8,
+which is the TLS layer underneath every SBI connection. 
+They represent the SBI protocol events that can be used in real networks to build the features.
+ 
+E1  NF registration
+      3GPP service:  Nnrf_NFManagement, NFRegister
+      HTTP request:  PUT /nnrf-nfm/v1/nf-instances/{nfInstanceId}  (full NF profile)
+      From -> to:    NF -> NRF
+      Spec:          TS 29.510
+      Observed at:   NRF access or audit log
+      Simulation:    nrf_events.csv, event_type = REGISTER
+      Features:      1-8, 10
+ 
+E2  NF profile update (heartbeats are also updates)
+      3GPP service:  Nnrf_NFManagement, NFUpdate
+      HTTP request:  PATCH (JSON Patch) or PUT on /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+      From -> to:    NF -> NRF
+      Spec:          TS 29.510
+      Observed at:   NRF access or audit log
+      Simulation:    nrf_events.csv, event_type = UPDATE (heartbeats not included)
+      Features:      2-8
+ 
+E3  NF deregistration
+      3GPP service:  Nnrf_NFManagement, NFDeregister
+      HTTP request:  DELETE /nnrf-nfm/v1/nf-instances/{nfInstanceId}
+      From -> to:    NF -> NRF
+      Spec:          TS 29.510
+      Observed at:   NRF access log
+      Simulation:    not generated
+      Features:      none
+ 
+E4  Status subscription
+      3GPP service:  Nnrf_NFManagement, NFStatusSubscribe
+      HTTP request:  POST /nnrf-nfm/v1/subscriptions
+      From -> to:    NF -> NRF
+      Spec:          TS 29.510
+      Observed at:   NRF access log
+      Simulation:    not generated
+      Features:      none
+ 
+E5  Status notification
+      3GPP service:  Nnrf_NFManagement, NFStatusNotify
+      HTTP request:  POST to the subscriber's nfStatusNotificationUri callback
+      From -> to:    NRF -> subscribed NF
+      Spec:          TS 29.510
+      Observed at:   NRF outbound log
+      Simulation:    not generated
+      Features:      none
+ 
+E6  NF discovery
+      3GPP service:  Nnrf_NFDiscovery
+      HTTP request:  GET /nnrf-disc/v1/nf-instances?target-nf-type=...&requester-nf-type=...
+      From -> to:    NF or SCP -> NRF
+      Spec:          TS 29.510
+      Observed at:   NRF access log
+      Simulation:    not generated
+      Features:      none (it only explains why a rogue NF gains traffic, feature 10b)
+ 
+E7  Access token request
+      3GPP service:  Nnrf_AccessToken (OAuth 2.0 client credentials)
+      HTTP request:  POST /oauth2/token
+      From -> to:    NF -> NRF
+      Spec:          TS 29.510, TS 33.501
+      Observed at:   NRF token-endpoint log
+      Simulation:    token_requests.csv
+      Features:      9
+ 
+E8  TLS identity
+      3GPP service:  mutual TLS handshake under every SBI connection (not a 3GPP message)
+      HTTP request:  none (client certificate SAN, certificate fingerprint, source IP)
+      From -> to:    both sides of any connection
+      Spec:          TS 33.501
+      Observed at:   wherever TLS terminates: NRF, SCP or mesh sidecar
+      Simulation:    columns src_ip, cert_san, cert_fp in nrf_events.csv
+      Features:      3, 4, 9
+ 
+E9  SBI service call
+      3GPP service:  any NF-to-NF service, such as Nudm_SDM, Nausf_UEAuthentication, Nudr_DR
+      HTTP request:  any method and path, with "Authorization: Bearer <token>"
+      From -> to:    consumer -> producer, directly or via the SCP
+      Spec:          TS 29.500, TS 23.501 Annex E, and each service's own spec
+      Observed at:   SCP or mesh access logs, producer metrics
+      Simulation:    sbi_calls.csv, producer_load.csv, post_register_traffic.csv
+      Features:      10-14
+ 
+Notes:
+  * E1, E2, E3 and E7 are calls to the NRF, so the NRF's own logs are enough for them. E4 and E6 also
+    arrive at the NRF; E5 goes the other way.
+  * E8 never stands alone: it adds "who really connected" to the other events, which is why its fields
+    sit inside the NRF event rows.
+  * The simulation only uses E1, E2, E7, E8 and E9. E3-E6 would make useful extra features, for example
+    discovery sweeps (E6) or s
 """
 from __future__ import annotations
 

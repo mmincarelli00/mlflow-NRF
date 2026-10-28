@@ -2,9 +2,9 @@
 """Train and compare model families for rogue / changed NF registration and new call-edge detection.
 
 Model families (one MLflow parent run each, one nested child run per hyper-parameter trial):
-  robust_z               BASELINE  median/MAD z-score per feature, one-sided, summed or max-ed
-  isolation_forest       unsupervised, fitted on clean windows only
-  lof                    Local Outlier Factor (novelty mode), fitted on clean windows only
+  robust_z               BASELINE  median/MAD z-score per feature, one-sided, summed or max-ed. Trained on normal rows only.
+  isolation_forest       unsupervised trees, fitted on clean windows only
+  lof                    Unsupervised. Local Outlier Factor (novelty mode). Based on local density and fitted on clean windows only
   hist_gbm               supervised HistGradientBoosting (needs labels: injected / analyst feedback)
   rules_only             hand-written weighted identity/policy rules, no learning ("must-beat" arm)
   hybrid_rules_iforest   rules + Isolation Forest rank (hard checks plus ML ranking)
@@ -31,13 +31,14 @@ from pathlib import Path
 
 import joblib
 import mlflow
+import mlflow.pyfunc
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, IsolationForest
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.neighbors import LocalOutlierFactor
 
-from features import RISK_COLS, build_features, load_raw, risk_matrix, split_masks
+from NRF_features import RISK_COLS, build_features, load_raw, risk_matrix, split_masks
 
 EXPERIMENT = "nrf/rogue_registration_and_call_edges"
 FEATURE_SET_VERSION = "v1-14items-16cols"
@@ -154,6 +155,20 @@ class HybridRulesIForest:
         return self.rules_.score(X) + self.alpha * pct
 
 
+class ScoreModel(mlflow.pyfunc.PythonModel):
+    """MLflow wrapper so any family is logged as a real MLflow model (shown in the Models column).
+
+    Input: a DataFrame with the 16 RISK_COLS. Output: the anomaly score (higher = more suspicious).
+    The frozen alert threshold is kept in `self.threshold` (alert when score > threshold).
+    """
+
+    def __init__(self, model, threshold):
+        self.model, self.threshold = model, threshold
+
+    def predict(self, context, model_input, params=None):
+        return self.model.score(model_input[RISK_COLS].to_numpy(dtype=float))
+
+
 FAMILIES = {
     "robust_z": (RobustZ, {"eps": [0.1, 0.25, 0.5], "zmax": [4.0, 8.0], "agg": ["sum", "max"]}),
     "isolation_forest": (IForest, {"n_estimators": [200, 500], "max_samples": [256, 1024], "max_features": [0.6, 1.0]}),
@@ -236,7 +251,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data-dir", default="data")
     ap.add_argument("--artifacts-dir", default="artifacts")
-    ap.add_argument("--tracking-uri", default=os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
+    ap.add_argument("--tracking-uri", default="http://127.0.0.1:5000")
     ap.add_argument("--experiment", default=EXPERIMENT)
     ap.add_argument("--target-fpr", type=float, default=0.005, help="window-level FPR used to freeze the threshold")
     ap.add_argument("--families", nargs="*", default=list(FAMILIES))
@@ -295,6 +310,16 @@ def main():
             mlflow.log_metrics(_finite({f"best_val_{k}": v for k, v in best["metrics"].items()}))
             mlflow.set_tag("best_trial_run_id", best["run_id"])
             mlflow.log_artifact(str(path), artifact_path="best_model")
+            # log the best model as an MLflow model (Models column) and register it as "nrf-<family>"
+            here = Path(__file__).resolve().parent
+            model_kwargs = dict(python_model=ScoreModel(best["model"], best["thr"]),
+                                code_paths=[str(here / "NRF_train.py"), str(here / "NRF_features.py")],
+                                input_example=pd.DataFrame(X_va[:5], columns=RISK_COLS),
+                                registered_model_name=f"nrf-{family}")
+            if int(mlflow.__version__.split(".")[0]) >= 3:
+                mlflow.pyfunc.log_model(name="model", **model_kwargs)           # MLflow 3.x
+            else:
+                mlflow.pyfunc.log_model(artifact_path="model", **model_kwargs)  # MLflow 2.x
             registry[family] = dict(parent_run_id=parent.info.run_id, trial_run_id=best["run_id"], params=best["params"],
                                     threshold=best["thr"], model_path=str(path), supervised=cls.supervised,
                                     val_metrics=best["metrics"])
@@ -314,6 +339,6 @@ def main():
 
 if __name__ == "__main__":
     # re-import under the module name so pickled model classes resolve as `train.<Class>` in test.py
-    from train import main as _main
+    from NRF_train import main as _main
 
     _main()

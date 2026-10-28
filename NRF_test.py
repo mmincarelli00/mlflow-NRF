@@ -31,7 +31,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from sklearn.metrics import precision_recall_curve  # noqa: E402
 
-from train import _finite, benign_breakdown, evaluate, prepare  # noqa: E402  (importing train also resolves pickled classes)
+from NRF_train import _finite, benign_breakdown, evaluate, prepare  # noqa: E402  (importing train also resolves pickled classes)
 
 HEADLINE = ["pr_auc", "roc_auc", "recall_at_fpr", "precision", "f1", "fpr", "alerts_per_day", "fp_per_day_benign",
             "benign_fpr", "episode_recall", "mttd_h"]
