@@ -1,4 +1,4 @@
-# •	ML-based detection of cyber-attacks and misconfigurations in a 5G core, monitoring NRF registrations and NF-to-NF service calls 
+# ML-based detection of cyber-attacks and misconfigurations in a 5G core, monitoring NRF registrations and NF-to-NF service calls 
 
 **Anomaly detection on 5G SA core signalling: rogue or changed NF registrations in the NRF and new NF-to-NF call edges on the SBI, with six model families compared in MLflow.**
 
