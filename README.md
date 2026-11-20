@@ -1,14 +1,4 @@
-# Detection of cyber-attacks and misconfigurations in a 5G core, monitoring NRF registrations and NF-to-NF service calls : Files, Models and Test Results
-
-**The goal of this project is the analsis and prediction of anomaly detection on 5G SA core signalling related to rogue or changed NF registrations in the NRF and new NF-to-NF call edges on the SBI, with six ML model families tracked in MLflow.**
-
-This repository is an end-to-end experiment for a communications service provider (CSP):
-
-1. **Simulate** 45 days of 5G SA core telemetry (NRF registrations, OAuth2 token requests, SCP call roll-ups, inventory and change feed), with injected attacks and realistic benign changes.
-2. **Build 14 security features** per NF instance and per hour from that telemetry.
-3. **Train and compare six anomaly-detection model families** (from a RobustZ baseline to rules, unsupervised ML, supervised ML and a hybrid), with every run, metric and model tracked in **MLflow**.
-
-> All data in this repository is **synthetic**. The results show that the feature set and the comparison pipeline work, not how the models would perform on a real network. The data sources section explains how to replace the simulator with real NRF, SCP and inventory data.
+# Detection of attacks and misconfigurations in a 5G core, monitoring NRF registrations and NF-to-NF service calls : Files, Models and Test Results
 
 ---
 
@@ -32,6 +22,16 @@ This repository is an end-to-end experiment for a communications service provide
 
 ## 1. Overview and scope
 
+**The goal of this project is the analsis and prediction of anomaly detection on 5G SA core signalling related to rogue or changed NF registrations in the NRF and new NF-to-NF call edges on the SBI, with six ML model families tracked in MLflow.**
+
+This repository is an end-to-end experiment for a communications service provider (CSP):
+
+1. **Simulate** 45 days of 5G SA core telemetry (NRF registrations, OAuth2 token requests, SBI Traffic Aggregation data with SCP identified as the source of the telemetry info, inventory and change feed), with injected attacks and realistic benign changes.
+2. **Build 14 security features** per NF instance and per hour from that telemetry.
+3. **Train and compare six anomaly-detection model families** (from a RobustZ baseline to rules, unsupervised ML, supervised ML and a hybrid), with every run, metric and model tracked in **MLflow**.
+
+> All data in this repository is **synthetic**. The results show that the feature set and the comparison pipeline work, not how the models would perform on a real network. The data sources section explains how to replace the simulator with real NRF, SCP and inventory data.
+
 ### The problem
 
 In a 5G SA core, network functions (NFs) find and call each other through the **NRF** (Network Repository Function). Every NF registers a profile in the NRF (its type, address, services, the subscriber ranges it serves and which NF types may call it). Consumers then discover producers through the NRF and obtain OAuth2 access tokens from it before calling them.
@@ -44,7 +44,7 @@ The experiment focuses on one family of anomalies with two complementary views:
 
 | View | Question | Examples |
 |---|---|---|
-| **Registry view** (NRF) | Who is allowed to exist in the NRF, and with which profile? | A fake UDM registers; a real NF's address is changed; a producer's allow-list is widened |
+| **Registry view** (NRF) | Which NFs are allowed to exist in the NRF, and with which profile? | A fake UDM registers; a real NF's address is changed; a producer's allow-list is widened |
 | **Graph view** (SBI calls) | Who actually calls whom, for which service and operation? | An AMF suddenly calls a UDR service it never used; forbidden calls succeed |
 
 A **call edge** is the triple `consumer NF type | service | operation`, for example `AMF | Nudm_SDM | GET /{supi}/am-data`. The set of normal edges is stable and dictated by 3GPP procedures, so a new edge is a strong signal of lateral movement or of a misconfiguration.
