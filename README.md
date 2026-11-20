@@ -23,48 +23,17 @@
 
 ## 1. What is the NRF in the 5G core
 
-```mermaid
-flowchart TB
-    subgraph TOP[" "]
-        direction LR
-        NSSF["NSSF<br/>Nnssf"]
-        NEF["NEF<br/>Nnef"]
-        NRF["NRF<br/>Nnrf"]
-        PCF["PCF<br/>Npcf"]
-        UDM["UDM<br/>Nudm"]
-        UDR["UDR<br/>Nudr"]
-        AF["AF<br/>Naf"]
-    end
-    BUS{{"Service-based interface: HTTP/2 + JSON over TLS<br/>direct, or indirect through the SCP"}}
-    subgraph BOT[" "]
-        direction LR
-        AUSF["AUSF<br/>Nausf"]
-        AMF["AMF<br/>Namf"]
-        SMF["SMF<br/>Nsmf"]
-        SCP["SCP<br/>Service Communication Proxy"]
-        SEPP["SEPP<br/>N32 to other PLMNs"]
-    end
-    subgraph UP["User plane and access"]
-        direction LR
-        UE["UE"] --- RAN["(R)AN"] ---|N3| UPF["UPF"] ---|N6| DN["Data network"]
-    end
-    TOP --- BUS
-    BUS --- BOT
-    BOT -.->|N1 and N2 to the AMF, N4 PFCP to the SMF| UP
-    classDef key fill:#fde68a,stroke:#b45309,stroke-width:2px,color:#000
-    class NRF,SCP key
-```
+![5G core Service-Based Architecture with the NRF and the SCP](docs/sba_topology.svg)
 
-*5G core Service-Based Architecture, simplified from the reference architecture in 3GPP TS 23.501 clause 4.2.3. The NRF and the SCP are highlighted.*
+*5G core Service-Based Architecture in the style of the 3GPP reference figure (TS 23.501 clause 4.2.3), with the SCP added on the service-based interface. The NRF and the SCP are highlighted; the UDR, the SEPP and other NFs are left out for clarity.*
 
 The 5G core control plane uses a **Service-Based Architecture (SBA)**. Each network function (NF) exposes what it does as **services**, named after the NF (`Namf_…`, `Nsmf_…`, `Nudm_…`), over the **service-based interface (SBI)**: REST APIs over HTTP/2, with JSON bodies and mutual TLS. Any NF that is allowed to can consume another NF's services.
 
 In the picture:
-- **The control-plane NFs** (AMF, SMF, AUSF, UDM, UDR, PCF, NSSF, NEF, AF) all sit on the SBI and expose one service-based interface each (`Namf`, `Nsmf`, …).
+- **The control-plane NFs** (NSSF, NEF, NRF, PCF, UDM, AF above the bus; AUSF, AMF, SMF below it) all sit on the SBI, drawn as the horizontal bus, and each exposes one service-based interface (`Nnssf`, `Namf`, `Nsmf`, …).
 - **The NRF** (Network Repository Function) is the registry, the discovery service and the OAuth2 authorisation server of the SBA. It is the subject of this chapter.
 - **The SCP** (Service Communication Proxy) is optional. With *indirect communication* (TS 23.501 Annex E), consumers send their requests through the SCP, which can also discover and select the producer on their behalf (delegated discovery). It sees every call, which is why it is the best place to observe NF-to-NF traffic.
-- **The SEPP** protects signalling exchanged with other operators' networks (roaming, N32).
-- **The user plane** (UE, radio access, UPF, data network) is reached from the control plane through classic reference points: N1 and N2 on the AMF, N4 (PFCP, not SBI) on the SMF.
+- **The user plane** (UE, radio access, UPF, data network) is reached from the control plane through classic point-to-point reference points: N1 (UE) and N2 (radio access) on the AMF, N4 (PFCP, not SBI) between the SMF and the UPF, then N3 and N6 for user traffic.
 
 ### The role of the NRF
 

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" font-family="Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">5G core Service-Based Architecture with NRF and SCP</title>
+  <desc id="d">Top row NSSF, NEF, NRF, PCF, UDM, AF and bottom row AUSF, AMF, SMF, SCP attached to the service-based interface bus; user plane UE, (R)AN, UPF and DN connected by reference points N1, N2, N3, N4 and N6.</desc>
+  <defs>
+    <style>
+      .nf   { fill: #e8f0fb; stroke: #3b6db3; stroke-width: 1.6; }
+      .key  { fill: #fde68a; stroke: #b45309; stroke-width: 2.6; }
+      .up   { fill: #eef6ee; stroke: #4a8a4a; stroke-width: 1.6; }
+      .name { font-size: 17px; font-weight: bold; fill: #1a1a1a; text-anchor: middle; }
+      .sub  { font-size: 10.5px; fill: #444; text-anchor: middle; }
+      .if   { font-size: 13px; font-style: italic; fill: #1f3f73; }
+      .rp   { font-size: 13px; font-weight: bold; fill: #2f5f2f; }
+      .stub { stroke: #3b6db3; stroke-width: 1.6; }
+      .link { stroke: #4a8a4a; stroke-width: 1.6; fill: none; }
+      .note { font-size: 12px; fill: #555; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="540" rx="10" fill="#ffffff"/>
+
+  <!-- top row: NSSF NEF NRF PCF UDM AF (centres 105..855, step 150) -->
+  <g>
+    <rect class="nf"  x="50"  y="40" width="110" height="50" rx="6"/><text class="name" x="105" y="71">NSSF</text>
+    <rect class="nf"  x="200" y="40" width="110" height="50" rx="6"/><text class="name" x="255" y="71">NEF</text>
+    <rect class="key" x="350" y="40" width="110" height="50" rx="6"/><text class="name" x="405" y="71">NRF</text>
+    <rect class="nf"  x="500" y="40" width="110" height="50" rx="6"/><text class="name" x="555" y="71">PCF</text>
+    <rect class="nf"  x="650" y="40" width="110" height="50" rx="6"/><text class="name" x="705" y="71">UDM</text>
+    <rect class="nf"  x="800" y="40" width="110" height="50" rx="6"/><text class="name" x="855" y="71">AF</text>
+  </g>
+  <g>
+    <line class="stub" x1="105" y1="90" x2="105" y2="165"/><text class="if" x="112" y="134">Nnssf</text>
+    <line class="stub" x1="255" y1="90" x2="255" y2="165"/><text class="if" x="262" y="134">Nnef</text>
+    <line class="stub" x1="405" y1="90" x2="405" y2="165"/><text class="if" x="412" y="134">Nnrf</text>
+    <line class="stub" x1="555" y1="90" x2="555" y2="165"/><text class="if" x="562" y="134">Npcf</text>
+    <line class="stub" x1="705" y1="90" x2="705" y2="165"/><text class="if" x="712" y="134">Nudm</text>
+    <line class="stub" x1="855" y1="90" x2="855" y2="165"/><text class="if" x="862" y="134">Naf</text>
+  </g>
+
+  <!-- service-based interface bus -->
+  <line x1="40" y1="165" x2="920" y2="165" stroke="#1f3f73" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- bottom row: AUSF AMF SMF SCP -->
+  <g>
+    <line class="stub" x1="180" y1="165" x2="180" y2="240"/><text class="if" x="187" y="206">Nausf</text>
+    <line class="stub" x1="405" y1="165" x2="405" y2="240"/><text class="if" x="412" y="206">Namf</text>
+    <line class="stub" x1="630" y1="165" x2="630" y2="240"/><text class="if" x="637" y="206">Nsmf</text>
+    <line class="stub" x1="800" y1="165" x2="800" y2="240"/>
+  </g>
+  <g>
+    <rect class="nf"  x="125" y="240" width="110" height="50" rx="6"/><text class="name" x="180" y="271">AUSF</text>
+    <rect class="nf"  x="350" y="240" width="110" height="50" rx="6"/><text class="name" x="405" y="271">AMF</text>
+    <rect class="nf"  x="575" y="240" width="110" height="50" rx="6"/><text class="name" x="630" y="271">SMF</text>
+    <rect class="key" x="715" y="240" width="170" height="50" rx="6"/><text class="name" x="800" y="264">SCP</text>
+    <text class="sub" x="800" y="281">Service Communication Proxy</text>
+  </g>
+
+  <!-- user plane and access -->
+  <g>
+    <rect class="up" x="50"  y="400" width="110" height="50" rx="6"/><text class="name" x="105" y="431">UE</text>
+    <rect class="up" x="245" y="400" width="110" height="50" rx="6"/><text class="name" x="300" y="431">(R)AN</text>
+    <rect class="up" x="575" y="400" width="110" height="50" rx="6"/><text class="name" x="630" y="431">UPF</text>
+    <rect class="up" x="800" y="400" width="110" height="50" rx="6"/><text class="name" x="855" y="431">DN</text>
+  </g>
+  <g>
+    <!-- N1 UE-AMF, N2 RAN-AMF, N4 SMF-UPF, N3 RAN-UPF, N6 UPF-DN, Uu UE-RAN -->
+    <line class="link" x1="120" y1="400" x2="385" y2="290"/><text class="rp" x="226" y="340">N1</text>
+    <line class="link" x1="315" y1="400" x2="425" y2="290"/><text class="rp" x="378" y="355">N2</text>
+    <line class="link" x1="630" y1="290" x2="630" y2="400"/><text class="rp" x="638" y="350">N4</text>
+    <line class="link" x1="355" y1="425" x2="575" y2="425"/><text class="rp" x="457" y="418">N3</text>
+    <line class="link" x1="685" y1="425" x2="800" y2="425"/><text class="rp" x="734" y="418">N6</text>
+    <line class="link" x1="160" y1="425" x2="245" y2="425" stroke-dasharray="5 4"/><text class="rp" x="190" y="418">Uu</text>
+  </g>
+
+  <!-- notes -->
+  <text class="note" x="40" y="490">Service-based interface (SBI): HTTP/2 REST APIs with JSON over mutual TLS. Requests go directly, or indirectly through the SCP.</text>
+  <text class="note" x="40" y="510">Highlighted: NRF (registry, discovery, OAuth2 tokens) and SCP. N4 uses PFCP, not the SBI. UDR, SEPP and other NFs omitted for clarity.</text>
+</svg>
