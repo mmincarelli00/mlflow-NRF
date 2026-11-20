@@ -51,7 +51,7 @@ It provides three services, defined in 3GPP TS 29.510:
 
 ### What the NRF stores: the NF profile
 
-The NRF keeps one **NF profile** per registered NF instance. The profile is the registration record that describes the instance, its capabilities and the services it provides. The last row of the table is not part of the profile: it is what the NRF issues based on it.
+The NRF keeps one **NF profile** per registered NF instance. The profile is the registration record that describes the instance, its capabilities and the services it provides.
 
 | Information | Profile attributes | Example | Used in this experiment |
 |---|---|---|---|
@@ -65,7 +65,8 @@ The NRF keeps one **NF profile** per registered NF instance. The profile is the 
 | Capabilities | PLMN, S-NSSAIs, DNNs, TAIs (`amfInfo`, `smfInfo`, …), supported features | slice 1, `internet` DNN | Yes: `ranges_added`, `diff_risk_score` |
 | Subscriber ranges | `supiRanges`, `gpsiRanges`, routing indicators, group IDs (in `udmInfo`, `udrInfo`, `ausfInfo`, `pcfInfo`, …): the subscribers whose data this instance holds | SUPIs `imsi-222010000000000` to `imsi-222010499999999` | Yes: `ranges_added`, `diff_risk_score` |
 | Authorisation lists | `allowedNfTypes`, `allowedNfDomains`, `allowedNssais`, `allowedOperationsPerNfType` | only AMF and SMF may call this UDM | Yes: `allowlist_widened` |
-| OAuth2 access tokens | Not stored in the profile: issued on request through `Nnrf_AccessToken`, signed by the NRF, only if the producer's authorisation lists allow the consumer. Claims: `iss`, `sub`, `aud`, `scope`, `exp` | token for an SMF with `scope=namf-comm`, valid for minutes | Yes: `token_sub_matches_cert`, `token_scope_vs_call_mismatch` |
+
+**OAuth2 access tokens are not part of the NF profile.** The NRF generates a token on request (`Nnrf_AccessToken`) and signs it with its private key, so nothing has to be stored for validation: producers check the signature with the NRF's public key. The NRF usually keeps an issuance log (who asked for which scope and when), which is the source of `token_requests.csv` in this project.
 
 ### NF and NF services: an example
 
