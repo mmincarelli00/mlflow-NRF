@@ -51,7 +51,7 @@ It provides three services, defined in 3GPP TS 29.510:
 
 ### What the NRF stores: the NF profile
 
-The NRF keeps one **NF profile** per registered NF instance. The profile is the registration record that describes the instance, its capabilities and the services it provides.
+The NRF keeps one **NF profile** per registered NF instance. The profile is the registration record that describes the instance, its capabilities and the services it provides. The last row of the table is not part of the profile: it is what the NRF issues based on it.
 
 | Information | Profile attributes | Example | Used in this experiment |
 |---|---|---|---|
@@ -62,8 +62,10 @@ The NRF keeps one **NF profile** per registered NF instance. The profile is the 
 | Selection attributes | `priority`, `capacity`, `load` | priority 1 = preferred | Indirectly: rogue NFs abuse them to attract traffic |
 | Heartbeat | `heartBeatTimer` | seconds between heartbeats | No |
 | NF services offered | `nfServices` (each with `serviceInstanceId`, `serviceName`, `versions`, `scheme`, `ipEndPoints`, `nfServiceStatus`) | `Namf_Communication`, `Nsmf_PDUSession` | Yes: changed service endpoints raise `diff_risk_score` |
-| Capabilities | PLMN, S-NSSAIs, DNNs, TAIs, SUPI ranges (`amfInfo`, `smfInfo`, `udmInfo`, …), supported features | slice 1, `internet` DNN, SUPI range | Yes: `ranges_added`, `diff_risk_score` |
+| Capabilities | PLMN, S-NSSAIs, DNNs, TAIs (`amfInfo`, `smfInfo`, …), supported features | slice 1, `internet` DNN | Yes: `ranges_added`, `diff_risk_score` |
+| Subscriber ranges | `supiRanges`, `gpsiRanges`, routing indicators, group IDs (in `udmInfo`, `udrInfo`, `ausfInfo`, `pcfInfo`, …): the subscribers whose data this instance holds | SUPIs `imsi-222010000000000` to `imsi-222010499999999` | Yes: `ranges_added`, `diff_risk_score` |
 | Authorisation lists | `allowedNfTypes`, `allowedNfDomains`, `allowedNssais`, `allowedOperationsPerNfType` | only AMF and SMF may call this UDM | Yes: `allowlist_widened` |
+| OAuth2 access tokens | Not stored in the profile: issued on request through `Nnrf_AccessToken`, signed by the NRF, only if the producer's authorisation lists allow the consumer. Claims: `iss`, `sub`, `aud`, `scope`, `exp` | token for an SMF with `scope=namf-comm`, valid for minutes | Yes: `token_sub_matches_cert`, `token_scope_vs_call_mismatch` |
 
 ### NF and NF services: an example
 
@@ -149,7 +151,7 @@ This repository is an end-to-end experiment for a communications service provide
 
 ### The problem
 
-In a 5G SA core, network functions (NFs) find and call each other through the **NRF** (Network Repository Function, see [chapter 1](#1-what-is-the-nrf-in-the-5g-core)). Every NF registers a profile in the NRF (its type, address, services, the subscriber ranges it serves and which NF types may call it). Consumers then discover producers through the NRF and obtain OAuth2 access tokens from it before calling them.
+In a 5G SA core, network functions (NFs) find and call each other through the **NRF** (Network Repository Function, see [chapter 1](#1-what-is-the-nrf-in-the-5g-core)). Every NF registers a profile in the NRF: its type, address and services, the subscriber ranges (SUPI or phone-number ranges) whose data it holds, and which NF types may call it. Consumers then discover producers through the NRF and obtain OAuth2 access tokens from it before calling them.
 
 The NRF profile is therefore the **root of trust** of the service-based architecture. If an attacker or a faulty change corrupts it, everything downstream behaves "correctly" against a poisoned source of truth.
 
