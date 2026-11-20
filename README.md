@@ -4,23 +4,169 @@
 
 ## Table of contents
 
-1. [Overview and scope](#1-overview-and-scope)
-2. [Network functions and SBI interfaces involved](#2-network-functions-and-sbi-interfaces-involved)
-3. [Data sources: where the fields come from and how to get them in a real network](#3-data-sources-where-the-fields-come-from-and-how-to-get-them-in-a-real-network)
-4. [The 14 features](#4-the-14-features)
-5. [Simulated anomalies and benign look-alikes](#5-simulated-anomalies-and-benign-look-alikes)
-6. [Repository files](#6-repository-files)
-7. [How to run](#7-how-to-run)
-8. [Machine learning models and evaluation protocol](#8-machine-learning-models-and-evaluation-protocol)
-9. [Results](#9-results)
-10. [Conclusions](#10-conclusions)
-11. [Limitations](#11-limitations)
-12. [Next steps](#12-next-steps)
-13. [References](#13-references)
+1. [What is the NRF in the 5G core](#1-what-is-the-nrf-in-the-5g-core)
+2. [Overview and scope](#2-overview-and-scope)
+3. [Network functions and SBI interfaces involved](#3-network-functions-and-sbi-interfaces-involved)
+4. [Data sources: where the fields come from and how to get them in a real network](#4-data-sources-where-the-fields-come-from-and-how-to-get-them-in-a-real-network)
+5. [The 14 features](#5-the-14-features)
+6. [Simulated anomalies and benign look-alikes](#6-simulated-anomalies-and-benign-look-alikes)
+7. [Repository files](#7-repository-files)
+8. [How to run](#8-how-to-run)
+9. [Machine learning models and evaluation protocol](#9-machine-learning-models-and-evaluation-protocol)
+10. [Results](#10-results)
+11. [Conclusions](#11-conclusions)
+12. [Limitations](#12-limitations)
+13. [Next steps](#13-next-steps)
+14. [References](#14-references)
 
 ---
 
-## 1. Overview and scope
+## 1. What is the NRF in the 5G core
+
+```mermaid
+flowchart TB
+    subgraph TOP[" "]
+        direction LR
+        NSSF["NSSF<br/>Nnssf"]
+        NEF["NEF<br/>Nnef"]
+        NRF["NRF<br/>Nnrf"]
+        PCF["PCF<br/>Npcf"]
+        UDM["UDM<br/>Nudm"]
+        UDR["UDR<br/>Nudr"]
+        AF["AF<br/>Naf"]
+    end
+    BUS{{"Service-based interface: HTTP/2 + JSON over TLS<br/>direct, or indirect through the SCP"}}
+    subgraph BOT[" "]
+        direction LR
+        AUSF["AUSF<br/>Nausf"]
+        AMF["AMF<br/>Namf"]
+        SMF["SMF<br/>Nsmf"]
+        SCP["SCP<br/>Service Communication Proxy"]
+        SEPP["SEPP<br/>N32 to other PLMNs"]
+    end
+    subgraph UP["User plane and access"]
+        direction LR
+        UE["UE"] --- RAN["(R)AN"] ---|N3| UPF["UPF"] ---|N6| DN["Data network"]
+    end
+    TOP --- BUS
+    BUS --- BOT
+    BOT -.->|N1 and N2 to the AMF, N4 PFCP to the SMF| UP
+    classDef key fill:#fde68a,stroke:#b45309,stroke-width:2px,color:#000
+    class NRF,SCP key
+```
+
+*5G core Service-Based Architecture, simplified from the reference architecture in 3GPP TS 23.501 clause 4.2.3. The NRF and the SCP are highlighted.*
+
+The 5G core control plane uses a **Service-Based Architecture (SBA)**. Each network function (NF) exposes what it does as **services**, named after the NF (`Namf_…`, `Nsmf_…`, `Nudm_…`), over the **service-based interface (SBI)**: REST APIs over HTTP/2, with JSON bodies and mutual TLS. Any NF that is allowed to can consume another NF's services.
+
+In the picture:
+- **The control-plane NFs** (AMF, SMF, AUSF, UDM, UDR, PCF, NSSF, NEF, AF) all sit on the SBI and expose one service-based interface each (`Namf`, `Nsmf`, …).
+- **The NRF** (Network Repository Function) is the registry, the discovery service and the OAuth2 authorisation server of the SBA. It is the subject of this chapter.
+- **The SCP** (Service Communication Proxy) is optional. With *indirect communication* (TS 23.501 Annex E), consumers send their requests through the SCP, which can also discover and select the producer on their behalf (delegated discovery). It sees every call, which is why it is the best place to observe NF-to-NF traffic.
+- **The SEPP** protects signalling exchanged with other operators' networks (roaming, N32).
+- **The user plane** (UE, radio access, UPF, data network) is reached from the control plane through classic reference points: N1 and N2 on the AMF, N4 (PFCP, not SBI) on the SMF.
+
+### The role of the NRF
+
+The NRF is the central discovery mechanism of the 5G core. NFs **register** their capabilities in it, and other NFs **discover** through it the services they need.
+
+The distinction matters: the NRF does not simply keep a list of deployed NF instances. It keeps the **registration information** of each instance, **including the services that instance offers** and how to reach them.
+
+It provides three services, defined in 3GPP TS 29.510:
+
+| NRF service | Operations | What it does | Event tag in this project |
+|---|---|---|---|
+| `Nnrf_NFManagement` | NFRegister, NFUpdate (including heartbeats), NFDeregister, NFStatusSubscribe, NFStatusNotify | Keeps the NF profiles up to date and tells subscribers when NFs appear, change or disappear | E1–E5 |
+| `Nnrf_NFDiscovery` | NFDiscover | Returns the NF profiles that match a request: NF type, service, PLMN, slice, DNN and so on | E6 |
+| `Nnrf_AccessToken` | Access token request (OAuth 2.0 client credentials) | Issues the tokens that authorise a consumer to call a producer's service | E7 |
+
+### What the NRF stores: the NF profile
+
+The NRF keeps one **NF profile** per registered NF instance. The profile is the registration record that describes the instance, its capabilities and the services it provides.
+
+| Information | Profile attributes | Example | Used in this experiment |
+|---|---|---|---|
+| NF instance identity | `nfInstanceId` | a UUID (`amf-01` in the simulation) | Yes: `id_in_inventory`, `second_source_for_id` |
+| NF type | `nfType` | AMF, SMF, UDM, PCF, AUSF | Yes: peer groups, call edges |
+| NF status | `nfStatus` | REGISTERED, SUSPENDED, UNDISCOVERABLE | No |
+| Address and endpoint | `fqdn`, `ipv4Addresses` | `amf01.core.example.com` | Yes: `addr_in_inventory`, `cert_matches_profile` |
+| Selection attributes | `priority`, `capacity`, `load` | priority 1 = preferred | Indirectly: rogue NFs abuse them to attract traffic |
+| Heartbeat | `heartBeatTimer` | seconds between heartbeats | No |
+| NF services offered | `nfServices` (each with `serviceInstanceId`, `serviceName`, `versions`, `scheme`, `ipEndPoints`, `nfServiceStatus`) | `Namf_Communication`, `Nsmf_PDUSession` | Yes: changed service endpoints raise `diff_risk_score` |
+| Capabilities | PLMN, S-NSSAIs, DNNs, TAIs, SUPI ranges (`amfInfo`, `smfInfo`, `udmInfo`, …), supported features | slice 1, `internet` DNN, SUPI range | Yes: `ranges_added`, `diff_risk_score` |
+| Authorisation lists | `allowedNfTypes`, `allowedNfDomains`, `allowedNssais`, `allowedOperationsPerNfType` | only AMF and SMF may call this UDM | Yes: `allowlist_widened` |
+
+### NF and NF services: an example
+
+Imagine two AMF instances. The NRF holds one profile for each, and each profile lists the services that instance offers:
+
+```text
+NRF repository
+├── AMF instance amf-01
+│   ├── address: amf01.core.example.com      status: REGISTERED
+│   └── services: Namf_Communication (available)
+│                 Namf_EventExposure (available)
+│                 Namf_MT            (available)
+└── AMF instance amf-02
+    ├── address: amf02.core.example.com      status: REGISTERED
+    └── services: Namf_Communication (available)
+                  Namf_EventExposure (available)
+```
+
+So the NRF knows that there are two AMF instances and which services each one offers, possibly with different capabilities or availability. A consumer that needs `Namf_MT` can only be pointed to `amf-01`.
+
+### Discovery and access: how a consumer reaches a producer
+
+Suppose an SMF needs an AMF that provides `Namf_Communication`:
+
+```mermaid
+sequenceDiagram
+    participant SMF as SMF (consumer)
+    participant NRF
+    participant AMF as AMF amf-01 (producer)
+    AMF->>NRF: NFRegister: PUT /nnrf-nfm/v1/nf-instances/amf-01 with its NF profile and services
+    NRF-->>AMF: 201 Created
+    loop every heartBeatTimer
+        AMF->>NRF: NFUpdate heartbeat: PATCH /nnrf-nfm/v1/nf-instances/amf-01
+    end
+    SMF->>NRF: NFDiscover: GET /nnrf-disc/v1/nf-instances with target-nf-type=AMF, service-names=namf-comm
+    NRF-->>SMF: 200 OK: matching NF profiles (amf-01, amf-02) with their service instances
+    SMF->>NRF: Access token request: POST /oauth2/token with scope=namf-comm
+    NRF-->>SMF: 200 OK: signed access token
+    SMF->>AMF: Namf_Communication request with Authorization: Bearer token
+    AMF-->>SMF: 2xx response
+```
+
+1. **Registration:** the AMF registers its profile, then keeps it alive with periodic heartbeats.
+2. **Discovery:** the SMF asks the NRF for AMFs offering `Namf_Communication`, with selection criteria such as PLMN, S-NSSAI or DNN. The NRF returns the matching profiles, with each instance's service information.
+3. **Authorisation:** the SMF requests an access token for that service. The NRF checks the AMF's allow-lists before issuing it.
+4. **Call:** the SMF calls the AMF's API directly, or through the SCP, presenting the token.
+
+### What the NRF is not
+
+The NRF is **not** a repository of NF software, configuration files or full runtime state. It holds **registration and discovery metadata**:
+- **NF level:** which NF instances exist and are registered.
+- **NF service level:** which services they offer and how those services can be reached.
+
+3GPP TS 29.510 defines the NRF as maintaining the NF profiles of available NF instances and their supported services, and defines discovery as returning NF instances with their associated NF service instances. In short, the NRF maintains both the **NF inventory** and the **service inventory** of the core, and the NF profile is the container that links the two.
+
+The NRF also does **not see the service calls themselves**: after discovery and token issuance, consumers talk to producers directly or through the SCP. That is why this experiment combines NRF data with SCP (or service-mesh) logs.
+
+### Why the NRF matters for this experiment
+
+Consumers trust what the NRF returns: discovery decides **where traffic goes**, and the allow-lists and tokens decide **who may call whom**. Whoever can change NF profiles can redirect traffic or open access. The anomalies studied in this repository follow directly from that:
+
+| What happens to the NRF | Anomaly type in this project |
+|---|---|
+| A fake NF registers a profile that wins discovery | `rogue_impostor` |
+| A real NF's identity is registered again from another source | `duplicate_id` |
+| A real NF's profile is updated with a new address | `hijack` |
+| A producer's allow-list is widened so a forbidden consumer gets tokens | `privilege_widening` |
+| The NRF is bypassed: an NF calls a service outside its role | `lateral_edge` (visible only in SCP logs) |
+
+---
+
+## 2. Overview and scope
 
 **The goal of this project is the analsis and prediction of anomaly detection on 5G SA core signalling related to rogue or changed NF registrations in the NRF and new NF-to-NF call edges on the SBI, with six ML model families tracked in MLflow.**
 
@@ -34,7 +180,7 @@ This repository is an end-to-end experiment for a communications service provide
 
 ### The problem
 
-In a 5G SA core, network functions (NFs) find and call each other through the **NRF** (Network Repository Function). Every NF registers a profile in the NRF (its type, address, services, the subscriber ranges it serves and which NF types may call it). Consumers then discover producers through the NRF and obtain OAuth2 access tokens from it before calling them.
+In a 5G SA core, network functions (NFs) find and call each other through the **NRF** (Network Repository Function, see [chapter 1](#1-what-is-the-nrf-in-the-5g-core)). Every NF registers a profile in the NRF (its type, address, services, the subscriber ranges it serves and which NF types may call it). Consumers then discover producers through the NRF and obtain OAuth2 access tokens from it before calling them.
 
 The NRF profile is therefore the **root of trust** of the service-based architecture. If an attacker or a faulty change corrupts it, everything downstream behaves "correctly" against a poisoned source of truth.
 
@@ -55,7 +201,7 @@ Many legitimate operations look like attacks: autoscaling, rolling upgrades, dis
 
 ---
 
-## 2. Network functions and SBI interfaces involved
+## 3. Network functions and SBI interfaces involved
 
 ### NFs, services and reference points used in the experiment
 
@@ -133,7 +279,7 @@ E1–E9 are this project's own shorthand for "the protocol event a feature is ex
 
 ---
 
-## 3. Data sources: where the fields come from and how to get them in a real network
+## 4. Data sources: where the fields come from and how to get them in a real network
 
 The simulator writes the **raw tables** a real deployment would collect. The features are computed later by `NRF_features.py`, so replacing the simulator with real data only requires filling the same tables (see `load_raw()`).
 
@@ -189,7 +335,7 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 
 ---
 
-## 4. The 14 features
+## 5. The 14 features
 
 `NRF_features.py` produces one row per NF instance per hour with **14 features in 16 columns** (items 5 and 10 each have two columns). Event features are neutral in hours without an event. State features (address, certificate) are carried forward until the next NRF event.
 
@@ -216,7 +362,7 @@ Before modelling, `risk_matrix()` turns the 16 columns into inputs where **highe
 
 ---
 
-## 5. Simulated anomalies and benign look-alikes
+## 6. Simulated anomalies and benign look-alikes
 
 ### Five anomaly types (110 episodes, 2–6 hours each)
 
@@ -247,7 +393,7 @@ Episodes on real instances end with an orchestrated **remediation** that restore
 
 ---
 
-## 6. Repository files
+## 7. Repository files
 
 | File | What it does | Main contents |
 |---|---|---|
@@ -270,7 +416,7 @@ Episodes on real instances end with an orchestrated **remediation** that restore
 
 ---
 
-## 7. How to run
+## 8. How to run
 
 ### Install
 
@@ -316,7 +462,7 @@ Run the three steps in order from the project folder: the scripts use relative p
 
 ---
 
-## 8. Machine learning models and evaluation protocol
+## 9. Machine learning models and evaluation protocol
 
 ### The six families
 
@@ -363,7 +509,7 @@ The mix covers statistics, unsupervised trees, density, supervised learning, exp
 
 ---
 
-## 9. Results
+## 10. Results
 
 Seed 7, default settings. Thresholds were frozen on validation.
 
@@ -423,7 +569,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 
 ---
 
-## 10. Conclusions
+## 11. Conclusions
 
 1. **The 14 features separate the five anomaly types from normal traffic**, and the registry view (identity, orchestration, profile diff) and the graph view (new edges, policy violations, token misuse) complement each other: identity checks catch impostors and duplicates, call-edge features catch lateral movement and privilege abuse that leave the registry untouched.
 2. **Domain knowledge beats pure anomaly detection.** Families that use rules or labels (hybrid, rules, HistGBM) tell rare-but-benign from rare-and-malicious; pure detectors (RobustZ, Isolation Forest, LOF) alert on every rare legitimate event, such as an NRF restart.
@@ -433,7 +579,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 
 ---
 
-## 11. Limitations
+## 12. Limitations
 
 - **Synthetic data.** All rates, probabilities and weights are assumptions; the generator tests the pipeline logic, not real-network performance.
 - **Hourly roll-ups.** Calls, tokens and load are hourly aggregates; detection time cannot be finer than one hour, and short attacks are diluted (for example the token-scope mismatch ratio).
@@ -447,7 +593,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 
 ---
 
-## 12. Next steps
+## 13. Next steps
 
 **Improve the hybrid**
 - Make the identity rules **orchestration-aware**: an unknown ID or address counts much less when the registration matched an orchestrator event (removes most CMDB-lag false alarms).
@@ -475,7 +621,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 
 ---
 
-## 13. References
+## 14. References
 
 - 3GPP TS 23.501: System architecture for the 5G System (SBA, NF services, SCP and indirect communication, Annex E)
 - 3GPP TS 23.502: Procedures for the 5G System (NF services and their known consumers)
