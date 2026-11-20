@@ -68,6 +68,24 @@ The NRF keeps one **NF profile** per registered NF instance. The profile is the 
 
 **OAuth2 access tokens are not part of the NF profile.** The NRF generates a token on request (`Nnrf_AccessToken`) and signs it with its private key, so nothing has to be stored for validation: producers check the signature with the NRF's public key. The NRF usually keeps an issuance log (who asked for which scope and when), which is the source of `token_requests.csv` in this project.
 
+### Does the NRF have its own profile?
+
+Not in the usual sense. In a deployment with a single NRF, the NRF does **not** register a profile with itself, and other NFs don't discover it through the NRF.
+
+**How NFs find the NRF.** Every NF needs the NRF's address before it can register or discover anything, so the NRF address is **pre-configured** on each NF, as part of its deployment configuration, or found through **DNS** under a well-known name. TS 23.501 describes this as the bootstrap step that comes before any NRF operation.
+
+**When the NRF does have a profile.** There is an NF profile type for the NRF itself (`nfType` = NRF, with an `nrfInfo` section). It is used when there are **several NRFs**:
+- **Hierarchical deployments.** A large operator can have local NRFs per site, region or network slice, plus a PLMN-level NRF above them. A lower-level NRF can register its own profile in the higher-level one. Its `nrfInfo` summarises what it serves (for example which UDM, AMF or SMF instances and subscriber ranges sit behind it), so the top NRF knows where to forward a discovery request it cannot answer itself.
+- **Roaming.** The NRF of a visited network reaches the home network's NRF through the SEPP, using configuration or DNS rather than its own registry.
+
+Other infrastructure functions do register normally: the **SCP** has its own profile type (`scpInfo`) and registers in the NRF like any other NF.
+
+**What this means for this experiment.** Because the NRF is the root of trust and is not described in its own registry, nothing in this experiment's data watches the NRF itself. Attacks that target it need separate controls:
+- tampering with the pre-configured NRF address on an NF, which would point it at a rogue NRF;
+- compromise of the NRF's signing key, which would let an attacker issue valid access tokens.
+
+In a multi-NRF deployment, the same approach can be extended to NRF-to-NRF registrations, checking changes to `nrfInfo` the way this project checks other profile changes.
+
 ### NF and NF services: an example
 
 Imagine two AMF instances. The NRF holds one profile for each, and each profile lists the services that instance offers:
