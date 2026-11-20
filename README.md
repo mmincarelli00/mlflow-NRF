@@ -213,8 +213,9 @@ The experiment focuses on one family of anomalies with two complementary views:
 | **Graph view** (SBI calls) | Who actually calls whom, for which service and operation? | An AMF suddenly calls a UDR service it never used; forbidden calls succeed |
 
 In Telemetry applications terminology:
-A **call edge** is the triple `consumer NF type | service | operation`, for example `AMF | Nudm_SDM | GET /{supi}/am-data`. The set of normal edges is stable and dictated by 3GPP procedures, so a new edge is a strong signal of lateral movement or of a misconfiguration.
-A **call roll-up** is an aggregation of telemetry measurements for calls belonging to the same logical call edge.
+
+- A **call edge** is the triple `consumer NF type | service | operation`, for example `AMF | Nudm_SDM | GET /{supi}/am-data`. The set of normal edges is stable and dictated by 3GPP procedures, so a new edge is a strong signal of lateral movement or of a misconfiguration.
+- A **call roll-up** is an aggregation of telemetry measurements for calls belonging to the same logical call edge.
 
 
 ### Why it is hard
