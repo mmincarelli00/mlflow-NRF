@@ -7,8 +7,8 @@ It writes nothing by default. It is mainly a library that train.py and test.py i
 The 14 selected features (items) -> 16 columns (items 5 and 10 each yield two columns):
 
  #   column                          source event(s)
- 1   id_in_inventory                 E1/E2 nfInstanceId           + CMDB inventory
- 2   addr_in_inventory               E1/E2 fqdn, ipv4Addresses    + CMDB inventory (state, carried forward)
+ 1   id_in_inventory                 E1/E2 nfInstanceId           + resource inventory
+ 2   addr_in_inventory               E1/E2 fqdn, ipv4Addresses    + resource inventory (state, carried forward)
  3   cert_matches_profile            E8 TLS client cert SAN       + E1/E2 profile fqdn (state, carried forward)
  4   second_source_for_id            E1/E2 + E8 (cert fp / source IP differ from previous event of same id)
  5   orch_event_matched              E1/E2                        + orchestrator events (+/-10 min)
@@ -196,7 +196,7 @@ def _event_features(raw: dict) -> pd.DataFrame:
     ev["inv_ips"] = ev.nf_instance_id.map(inv.approved_ips)
     fqdn_ok = ev.profile_fqdn == ev.inv_fqdn
     ip_ok = pd.Series([isinstance(ips, str) and ip in ips.split("|") for ip, ips in zip(ev.profile_ip, ev.inv_ips)])
-    known_from = ev.nf_instance_id.map(inv.known_from)  # CMDB entries can lag behind the deployment
+    known_from = ev.nf_instance_id.map(inv.known_from)  # resource-inventory entries can lag behind the deployment
     known = (known_from.notna() & (ev.ts >= known_from)).values
     ev["addr_in_inventory"] = (fqdn_ok.values & ip_ok.values & known).astype(int)
     ev["cert_matches_profile"] = (ev.cert_san == ev.profile_fqdn).astype(int)

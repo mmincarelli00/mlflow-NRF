@@ -220,7 +220,7 @@ In Telemetry applications terminology:
 
 ### Why it is hard
 
-Many legitimate operations look like attacks: autoscaling, rolling upgrades, disaster-recovery (DR) failover, NRF restarts with mass re-registration, certificate rotation, late CMDB updates. A useful detector must separate **rare but planned** from **rare and malicious**. The simulator generates these benign look-alikes on purpose, and the evaluation measures false alarms on each of them.
+Many legitimate operations look like attacks: autoscaling, rolling upgrades, disaster-recovery (DR) failover, NRF restarts with mass re-registration, certificate rotation, late resource-inventory updates. A useful detector must separate **rare but planned** from **rare and malicious**. The simulator generates these benign look-alikes on purpose, and the evaluation measures false alarms on each of them.
 
 ---
 
@@ -280,7 +280,7 @@ flowchart LR
     T["E8: mutual TLS on every connection"] -.-> NRF
     T -.-> SCP
     O["Orchestrator, GitOps, Kubernetes audit"] --> L4[/"change feed"/]
-    D["CMDB or NFVO"] --> L5[/"inventory"/]
+    D["Resource inventory, 3GPP NRM, NFVO"] --> L5[/"inventory"/]
     S["TS 23.502, NRF allow-lists, mesh policy"] --> L6[/"policy matrix"/]
 ```
 
@@ -310,7 +310,7 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 
 | Table | Grain | Key columns | Simulated from | Real-world source |
 |---|---|---|---|---|
-| `inventory.csv` | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | CMDB or NFVO inventory |
+| `inventory.csv` | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | Resource inventory (TM Forum TMF639), 3GPP NRM, NFVO |
 | `policy_matrix.csv` | one row per (service, allowed consumer type) (15) | `service`, `allowed_consumer_type` | `EDGES` | TS 23.502 consumer lists, NRF `allowedNfTypes`, mesh authorization policy |
 | `change_feed.csv` | one row per orchestrator event or maintenance window (193) | `kind`, `nf_instance_id`, `ts_start`, `ts_end`, `approved_edges`, `approved_from` | scenario code | Orchestrator, GitOps, Kubernetes audit log, change calendar (ITSM) |
 | `nrf_events.csv` | one row per NRF registration or update (1,647) | profile fields, `changed_paths`, `n_ranges_added`, `n_allowlist_added`, TLS identity | scenario code | NRF access or audit log (E1, E2) + TLS metadata (E8) |
@@ -347,7 +347,7 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 - `producer_load` and the post-registration traffic come from the same logs grouped by destination, or from producer metrics (for example Prometheus counters).
 
 **Inventory, change control and policy.**
-- `inventory.csv`: CMDB or NFVO, including approved IPs per instance and the time each entry was created (`known_from`).
+- `inventory.csv`: the operator's **resource inventory** (TM Forum TMF639 Resource Inventory API), the **3GPP NRM** of the configured NFs (TS 28.541 managed objects such as `AMFFunction` and `NRFFunction`, read through the provisioning management service of TS 28.532) and the NFVO deployment records. It includes the approved IPs per instance (often from IPAM) and the time each entry was created (`known_from`).
 - `change_feed.csv`: orchestrator events per instance, GitOps commits, Kubernetes audit events and the approved maintenance calendar. `approved_edges` corresponds to new call relationships declared in a change ticket.
 - `policy_matrix.csv`: start from the TS 23.502 "known NF service consumers", reconcile with the live NRF allow-lists and the mesh authorization policy, and keep it under version control. Mismatches between these sources are findings in themselves.
 
@@ -364,7 +364,7 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 
 | # | Column | Definition | Source events |
 |---|---|---|---|
-| 1 | `id_in_inventory` | Instance ID known to the CMDB at that hour | E1/E2 + inventory |
+| 1 | `id_in_inventory` | Instance ID known to the resource inventory at that hour | E1/E2 + inventory |
 | 2 | `addr_in_inventory` | Registered FQDN and IP match the approved ones (state) | E1/E2 + inventory |
 | 3 | `cert_matches_profile` | Certificate SAN equals the registered FQDN (state) | E8 + E1/E2 |
 | 4 | `second_source_for_id` | Same ID seen with a different certificate or source IP than its previous event, held 6 h | E1/E2 + E8 |
@@ -404,7 +404,7 @@ Episodes on real instances end with an orchestrated **remediation** that restore
 | Benign change | Why it looks suspicious |
 |---|---|
 | Autoscale, NEF go-live | New instance registration; the NEF also creates new call edges (approved 6 h later) |
-| CMDB lag (24 h) | Unknown ID and address, although orchestrated |
+| Inventory lag (24 h) | Unknown ID and address, although orchestrated |
 | Rolling upgrade | Re-registration with changed features |
 | Slice launch | Ranges and allow-list entries added |
 | DR failover and failback | Address change and a new source for the ID |
@@ -571,7 +571,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 
 ### Test share of benign-change hours alerted (lower is better)
 
-| Family | autoscale | cert rotation | CMDB lag | DR failover | feature trial | NRF restart | pod reschedule | remediation | rolling upgrade |
+| Family | autoscale | cert rotation | inventory lag | DR failover | feature trial | NRF restart | pod reschedule | remediation | rolling upgrade |
 |---|---|---|---|---|---|---|---|---|---|
 | hybrid_rules_iforest | 0.33 | 0.00 | 1.00 | 0.00 | 0.55 | 0.01 | 0.00 | 0.07 | 0.00 |
 | hist_gbm | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
@@ -582,7 +582,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 
 ### Reading the results
 
-- **The hybrid is the best overall choice.** It ranks first on validation, where the choice is made, and stays first on test with a small gap (+0.04). It produces about 12.5 alerts per day, 74 % of them real, catches 86 % of the attacks, almost always in the first hour. Nearly all its false alarms are benign-change hours, mainly **CMDB lag** (100 %) and **feature trials** (55 %).
+- **The hybrid is the best overall choice.** It ranks first on validation, where the choice is made, and stays first on test with a small gap (+0.04). It produces about 12.5 alerts per day, 74 % of them real, catches 86 % of the attacks, almost always in the first hour. Nearly all its false alarms are benign-change hours, mainly **inventory lag** (100 %) and **feature trials** (55 %).
 - **Its weak spot is the hijack** (2 of 5 caught). A stealth hijack only raises "second source", "no orchestration" and "outside the window", which have low weights in the strict rules and stay under the hybrid's threshold. `rules_only` catches all of them, so the signal exists.
 - **HistGBM is the quietest**: zero false alarms and precision 1.0, because it learned from labels that NRF restarts and DR failovers are normal. It misses stealthy variants (56 % of impostors, 40 % of hijacks): it recognises what it has seen.
 - **RobustZ and Isolation Forest catch every attack but alert on every NRF restart.** Their thresholds were frozen on a validation week **without any NRF restart**, while the test period contains two (79 benign hours). That explains their negative gaps (−0.11 and −0.23) and their 10–11 benign false alarms per day: they find "rare", not "malicious".
@@ -597,7 +597,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 1. **The 14 features separate the five anomaly types from normal traffic**, and the registry view (identity, orchestration, profile diff) and the graph view (new edges, policy violations, token misuse) complement each other: identity checks catch impostors and duplicates, call-edge features catch lateral movement and privilege abuse that leave the registry untouched.
 2. **Domain knowledge beats pure anomaly detection.** Families that use rules or labels (hybrid, rules, HistGBM) tell rare-but-benign from rare-and-malicious; pure detectors (RobustZ, Isolation Forest, LOF) alert on every rare legitimate event, such as an NRF restart.
 3. **The recommended design is a hybrid**: hard identity and policy rules for the clear-cut checks, with ML ranking the rest. With labels, a supervised model adds a high-precision tier.
-4. **Change-control data is essential.** Orchestrator events, the maintenance calendar, an up-to-date CMDB and an independent policy matrix are what turn "something changed" into "something unauthorised changed". Most of the remaining false alarms come from gaps in these sources (CMDB lag, stale policy).
+4. **Change-control data is essential.** Orchestrator events, the maintenance calendar, an up-to-date resource inventory and an independent policy matrix are what turn "something changed" into "something unauthorised changed". Most of the remaining false alarms come from gaps in these sources (inventory lag, stale policy).
 5. **One validation period is not enough.** The event mix differs between weeks (no NRF restart in validation, two in test), so model selection should use several time folds or several datasets.
 
 ---
@@ -619,7 +619,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 ## 13. Next steps
 
 **Improve the hybrid**
-- Make the identity rules **orchestration-aware**: an unknown ID or address counts much less when the registration matched an orchestrator event (removes most CMDB-lag false alarms).
+- Make the identity rules **orchestration-aware**: an unknown ID or address counts much less when the registration matched an orchestrator event (removes most inventory-lag false alarms).
 - Add a dedicated **hijack rule**: "second source **and** no orchestration" with a higher weight.
 - Replace the raw traffic share with **`share_vs_fair = share × number of registered instances of the type`**.
 - Check `live_from` as well as `known_from` in `id_in_inventory`.
@@ -637,7 +637,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 - Use a longer post-registration window (60 min) to catch slow-ramping impostors.
 
 **Move towards production**
-- Replace `NRF_synthetic_data.py` with an ingestion pipeline that fills the same raw tables from NRF, TLS, SCP, CMDB and orchestrator sources; only `load_raw()` needs to change.
+- Replace `NRF_synthetic_data.py` with an ingestion pipeline that fills the same raw tables from NRF, TLS, SCP, resource inventory and orchestrator sources; only `load_raw()` needs to change.
 - Build the instance-hour universe from the union of NRF registry, SCP logs and inventory.
 - Tiered alerting: supervised model for high-severity alerts, hybrid for the analyst queue; feed analyst verdicts back as labels.
 - Serve the registered `nrf-<family>` models from the MLflow Model Registry.
@@ -652,4 +652,8 @@ Seed 7, default settings. Thresholds were frozen on validation.
 - 3GPP TS 29.510: Network function repository services (NFManagement, NFDiscovery, AccessToken)
 - 3GPP TS 33.501: Security architecture and procedures for 5G System (mutual TLS, OAuth 2.0 authorisation)
 - 3GPP TS 29.244: PFCP (N4), for the SMF–UPF interface
+- 3GPP TS 28.622: Generic Network Resource Model (NRM)
+- 3GPP TS 28.541: 5G Network Resource Model (NRM), including the 5GC network functions
+- 3GPP TS 28.532: Management services, including the provisioning management service
+- TM Forum TMF639: Resource Inventory Management API
 - MLflow documentation: https://mlflow.org/docs/latest/

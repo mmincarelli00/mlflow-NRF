@@ -6,7 +6,7 @@ SCP/mesh call roll-ups, inventory and change feed). `features.py` turns them int
 features; no feature is computed here, and the ground truth lives only in labels.csv / episodes.csv.
 
 Raw tables written to --out (CSV):
-  inventory.csv               CMDB/NFVO: approved NF instances, FQDNs, approved IPs, known_from
+  inventory.csv               resource inventory (TM Forum TMF639 / 3GPP NRM, NFVO): approved NF instances, FQDNs, approved IPs, known_from
   change_feed.csv             orchestrator events (instance-specific) + maintenance windows
   policy_matrix.csv           (service, allowed consumer NF type): 3GPP procedures + NRF allow-lists
   nrf_events.csv              E1/E2: NFRegister / NFUpdate (profile, TLS identity, JSON-patch paths)
@@ -17,7 +17,7 @@ Raw tables written to --out (CSV):
   labels.csv / episodes.csv   ground truth (anomaly episodes and benign changes)
   meta.json                   start time, days, baseline length
 
-Benign "hard negatives" are generated on purpose: autoscale-out (incl. instances whose CMDB entry lags
+Benign "hard negatives" are generated on purpose: autoscale-out (incl. instances whose resource-inventory entry lags
 by 24 h), rolling upgrades, slice launches, DR failover/failback, NRF-restart mass re-registration,
 certificate rotation, pod reschedules (new source IP), a new NF type going live (new legitimate call
 edges), 6-hour feature trials (new edge answered 2xx but absent from the stale policy matrix),
@@ -317,10 +317,10 @@ class Simulator:
             for k in ks:
                 self._mk(t, k, int(self.maint_time(lo, hi)), "autoscale")
         for t, k in [("AMF", 9), ("SMF", 9), ("UDM", 6), ("AUSF", 4), ("PCF", 4)]:
-            self._mk(t, k, 24 * 365 * 5, "reserved")  # CMDB entries that are reserved but never deployed
+            self._mk(t, k, 24 * 365 * 5, "reserved")  # inventory entries that are reserved but never deployed
         for n, inst in enumerate(i for i in self.insts.values() if i["kind"] == "autoscale"):
             if n < 2:
-                inst["known_h"] = inst["live_h"] + 24  # CMDB updated a day late
+                inst["known_h"] = inst["live_h"] + 24  # resource inventory updated a day late
         nef_day = self.baseline_days + 5
         nef_h = self.maint_time(nef_day * 24, self.H - 48)
         for k in NEF_IDS:
@@ -375,7 +375,7 @@ class Simulator:
                 self.add_change(h, inst["id"], approved_edges=approved, approved_from=appr_from)
                 self.add_post(eid, inst["id"], h, inst["type"], float(rng.uniform(60, 900)), float(rng.uniform(0.0, 0.06)))
                 if inst.get("known_h"):
-                    self.mark(inst["id"], int(h), int(h) + 24, 0, "benign_cmdb_lag")
+                    self.mark(inst["id"], int(h), int(h) + 24, 0, "benign_inventory_lag")
                 self.mark(inst["id"], int(h), int(h) + (6 if inst["kind"] == "nef" else 1), 0, sub)
         # routine load/capacity updates (not orchestrated, low risk)
         for inst in self.real:
@@ -499,7 +499,7 @@ class Simulator:
         fqdn = f"{iid}.5gc.mnc001.mcc001.3gppnetwork.org" if stealth else f"{iid}.lab.example.net"
         ip = f"10.{int(rng.integers(200, 250))}.{int(rng.integers(0, 255))}.{int(rng.integers(1, 254))}"
         san = fqdn if rng.random() < (0.5 if stealth else 0.3) else str(rng.choice(["localhost", "nrf.internal", "pod-7f3a"]))
-        if variant == "reserved":  # squats a reserved CMDB identity and its approved address: only orchestration is missing
+        if variant == "reserved":  # squats a reserved inventory identity and its approved address: only orchestration is missing
             r = [i for i in self.insts.values() if i["kind"] == "reserved"]
             r = r[int(rng.integers(len(r)))]
             ntype, iid, fqdn, ip = r["type"], r["id"], r["fqdn"], r["ip"]
