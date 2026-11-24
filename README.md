@@ -21,7 +21,8 @@
     - [Where the events are observed](#where-the-events-are-observed)
     - [Event tags E1 to E9](#event-tags-e1-to-e9)
 4. [Data sources: where the fields come from and how to get them in a real network](#4-data-sources-where-the-fields-come-from-and-how-to-get-them-in-a-real-network)
-    - [The 10 raw tables](#the-10-raw-tables)
+    - [The raw tables](#the-raw-tables)
+    - [Fields of the raw tables](#fields-of-the-raw-tables)
     - [How to obtain each group of fields in a real network](#how-to-obtain-each-group-of-fields-in-a-real-network)
 5. [The 14 features](#5-the-14-features)
 6. [Simulated anomalies and benign look-alikes](#6-simulated-anomalies-and-benign-look-alikes)
@@ -321,24 +322,171 @@ Adding E3–E6 is listed in the [next steps](#13-next-steps) as a way to extend 
 
 The simulator writes the **raw tables** a real deployment would collect. The features are computed later by `NRF_features.py`, so replacing the simulator with real data only requires filling the same tables (see `load_raw()`).
 
-### The 10 raw tables
+### The raw tables
 
-The **Events used** column shows which event tags (see [Event tags E1 to E9](#event-tags-e1-to-e9)) each table is built from. Tables marked *none* come from management, configuration or ground-truth data, not from protocol events. No table uses E3–E6.
+The **Events used** column shows which event tags (see [Event tags E1 to E9](#event-tags-e1-to-e9)) each table is built from, and **Simulated from** how `NRF_synthetic_data.py` builds it. The ten CSV files are listed with `meta.json`, which describes the dataset. Tables marked *none* come from management, configuration or ground-truth data, not from protocol events. No table uses E3–E6.
 
 | Table | Events used | Grain | Key columns | Simulated from | Real-world source |
 |---|---|---|---|---|---|
-| `inventory.csv` | none (management data) | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | OSS resource inventory (TM Forum TMF639), 5GC element queried with NRM, NFVO |
-| `policy_matrix.csv` | none (specs and configuration) | one row per (service, allowed consumer type) (15) | `service`, `allowed_consumer_type` | `EDGES` | TS 23.502 consumer lists, NRF `allowedNfTypes`, mesh authorization policy |
-| `change_feed.csv` | none (orchestration and change data) | one row per orchestrator event or maintenance window (193) | `kind`, `nf_instance_id`, `ts_start`, `ts_end`, `approved_edges`, `approved_from` | scenario code | Orchestrator, GitOps, Kubernetes audit log, change calendar (ITSM) |
-| `nrf_events.csv` | E1, E2, E8 | one row per NRF registration or update (1,647) | profile fields, `changed_paths`, `n_ranges_added`, `n_allowlist_added`, TLS identity | scenario code | NRF access or audit log (E1, E2) + TLS metadata (E8) |
-| `post_register_traffic.csv` | E1, E9 | one row per registration (258) | `ttft_s`, `requests_10m`, `type_requests_10m` | drawn per scenario | Join of E1 with the first E9 requests received |
-| `token_requests.csv` | E7, E8 | one row per instance and hour (27,051) | `n_requests`, `n_sub_mismatch` | normal rates + attacks | NRF token-endpoint log (E7) joined with E8 |
-| `sbi_calls.csv` | E9 (token scope from the token issued at E7) | one row per hour, consumer instance, service, operation, token scope (85,654) | `consumer_type`, `service`, `operation`, `token_scope_service`, `n_calls`, `n_2xx`, `n_401`, `n_403`, `n_5xx` | `EDGES` + attacks | SCP or mesh access logs (E9) |
-| `producer_load.csv` | E9 | one row per live instance and hour (38,747) | `n_requests_received` | `PRODUCER_LOAD` | Producer metrics or SCP logs grouped by destination |
-| `labels.csv` | none (ground truth) | one row per non-normal instance-hour (844) | `label`, `subtype`, `episode_id` | injected episodes | SOC incidents, red-team or injected tests |
-| `episodes.csv` | none (ground truth) | one row per anomaly episode (110) | `episode_id`, `subtype`, `start_window` | injected episodes | incident records |
+| `inventory.csv` | none (management data) | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | `build_instances()` and `_mk()` create the instance catalogue: 33 base instances (`NF_COUNTS`), 5 autoscale (`AUTOSCALE_EXTRA`), 2 NEF and 5 reserved IDs that are never deployed; two autoscale entries get a 24 h inventory lag. `run()` writes one row per instance. | OSS resource inventory (TM Forum TMF639), 5GC element queried with NRM, NFVO |
+| `policy_matrix.csv` | none (specs and configuration) | one row per (service, allowed consumer type) (15) | `service`, `allowed_consumer_type` | `ALLOWED`, built from `EDGES` when the module is imported: for each service, the consumer types that call it normally. `run()` writes one row per (service, consumer type) pair. | TS 23.502 consumer lists, NRF `allowedNfTypes`, mesh authorization policy |
+| `change_feed.csv` | none (orchestration and change data) | one row per orchestrator event or maintenance window (193) | `kind`, `nf_instance_id`, `ts_start`, `ts_end`, `approved_edges`, `approved_from` | `add_change()` writes an orchestrator event for each planned legitimate change (registrations, upgrades, slice launches, DR, most certificate rotations, feature trials, remediations), 0–4 min before the NRF event (8 % late by 12–40 min); NEF records carry `approved_edges`. `run()` adds the Tuesday/Thursday 01–05 h maintenance windows. | Orchestrator, GitOps, Kubernetes audit log, change calendar (ITSM) |
+| `nrf_events.csv` | E1, E2, E8 | one row per NRF registration or update (1,647) | profile fields, `changed_paths`, `n_ranges_added`, `n_allowlist_added`, TLS identity | `ev()` / `legit_ev()`, called by `normal_events()` (initial registrations, routine updates, certificate rotations, upgrades, slice launches, DR failover, NRF restarts, pod reschedules), by the `_inj_*()` attack functions and by `_remediate()`. Sorted by time in `run()`. | NRF access or audit log (E1, E2) + TLS metadata (E8) |
+| `post_register_traffic.csv` | E1, E9 | one row per registration (258) | `ttft_s`, `requests_10m`, `type_requests_10m` | `add_post()`, called for every `REGISTER`: time to first traffic and traffic share are drawn per scenario; the NF type's 10-minute volume comes from `PRODUCER_LOAD`, `NF_COUNTS` and the day/night curve. | Join of E1 with the first E9 requests received |
+| `token_requests.csv` | E7, E8 | one row per instance and hour (27,051) | `n_requests`, `n_sub_mismatch` | `add_tokens()`: in `normal_traffic()`, Poisson(6) requests per hour for every consumer instance with rare benign mismatches; attacks add rows with extra requests and identity mismatches (`_bad_tokens()`). | NRF token-endpoint log (E7) joined with E8 |
+| `sbi_calls.csv` | E9 (token scope from the token issued at E7) | one row per hour, consumer instance, service, operation, token scope (85,654) | `consumer_type`, `service`, `operation`, `token_scope_service`, `n_calls`, `n_2xx`, `n_401`, `n_403`, `n_5xx` | `add_calls()`: in `normal_traffic()`, one hourly call stream per `EDGES` edge (rate × day/night curve × noise); status codes are binomial draws. Attacks and feature trials add forbidden edges chosen by `violating_edge()`, sometimes with a misused token scope. | SCP or mesh access logs (E9) |
+| `producer_load.csv` | E9 | one row per live instance and hour (38,747) | `n_requests_received` | `add_load()` in `normal_traffic()`: Poisson(`PRODUCER_LOAD[type]` × day/night curve × ramp) for every live instance-hour; rogue impostors get rows for their episode hours. | Producer metrics or SCP logs grouped by destination |
+| `labels.csv` | none (ground truth) | one row per non-normal instance-hour (844) | `label`, `subtype`, `episode_id` | `mark()`, called by every benign scenario (label 0) and every attack (label 1); an anomaly is never overwritten by a benign mark. `run()` writes only the marked instance-hours. | SOC incidents, red-team or injected tests |
+| `episodes.csv` | none (ground truth) | one row per anomaly episode (110) | `episode_id`, `subtype`, `start_window` | `inject()`: 110 episodes, type drawn with `SUBTYPE_P`, start uniform after the baseline (25 % moved into maintenance windows), duration 2–6 h, each built by its `_inj_*()` function. | incident records |
+| `meta.json` | none (run settings) | one JSON object per dataset | `start`, `days`, `baseline_days`, `window`, `n_events`, `n_episodes` | Written by `run()` from the command-line options and the generated counts | Metadata of the collection or ingestion run (period covered, baseline length) |
 
-`meta.json` stores the start time, the number of days, the baseline length and counts.
+The next section describes every field of these tables.
+
+### Fields of the raw tables
+
+This section lists every field of every raw table: what it means, and how `NRF_synthetic_data.py` computes it. All functions named below are methods of the `Simulator` class unless stated otherwise.
+
+#### Building blocks used by the generator
+
+| Element | What it is |
+|---|---|
+| Simulation clock | Time is counted in hours `h` from `START` (Monday 2026-01-05 00:00). `T(h)` turns hours into a timestamp; `win(hs)` turns hour indexes into hourly window starts. |
+| Hourly windows | Traffic, token and load tables have one row per hour (`window_start`), not per request. |
+| Day/night curve (`diurnal`) | Traffic multiplier per hour: `0.75 + 0.25 · sin(2π · (hour − 9) / 24)`, so between 0.5 and 1.0 with the peak around 15:00, times 0.85 on Saturdays and Sundays. |
+| Random noise | Volumes are Poisson draws around a mean that is multiplied by a log-normal factor (σ = 0.1). Status codes are binomial draws. Everything comes from one random generator seeded by `--seed`. |
+| Ramp-up | Instances deployed after hour 0 (autoscale, NEF) reach full traffic linearly over their first 6 hours. |
+| Maintenance windows | Tuesdays and Thursdays 01:00–05:00. `maint_time()` picks a random moment inside one. |
+| Fingerprints (`_hex`) | Certificate fingerprints are the first 16 hex characters of a SHA-1 hash of a label, e.g. `_hex("amf-01")`. |
+| Instance catalogue | `build_instances()` and `_mk()` create all instances first (see `inventory.csv`); every other table refers to them by `nf_instance_id`. |
+
+#### `inventory.csv`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `nf_instance_id` | Instance identifier; stands in for the 3GPP `nfInstanceId` (a UUID in a real network) | `_mk()`: NF type in lower case plus a two-digit number, e.g. `amf-03` |
+| `nf_type` | NF type | The type passed to `_mk()`: 33 base instances from `NF_COUNTS`, 5 autoscale from `AUTOSCALE_EXTRA`, 2 NEF, 5 reserved |
+| `fqdn` | Approved FQDN | `<id>.5gc.mnc001.mcc001.3gppnetwork.org` |
+| `approved_ips` | Approved primary and disaster-recovery (DR) addresses, separated by `\|` | Primary `10.{10+t}.0.{k}`, DR `10.{110+t}.0.{k}`, where `t` is the position of the NF type in `TYPE_IDX` and `k` the instance number |
+| `live_from` | When the instance is deployed | `T(live_h)`: hour 0 for base instances; a random maintenance window at least one day after the baseline for autoscale; a maintenance window around baseline + 5 days for the NEF; 5 years later (never) for the reserved IDs |
+| `known_from` | When the resource inventory knows about the instance | The simulation start, except `amf-07` and `amf-08`, which get `live_from` + 24 h (inventory lag) |
+
+#### `policy_matrix.csv`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `service` | A producer service, e.g. `Nudm_SDM` | Every service that appears in `EDGES` |
+| `allowed_consumer_type` | One NF type allowed to call it | At import, `ALLOWED` collects, for each service, the consumer types that call it in `EDGES`; `run()` writes one row per (service, consumer type) pair |
+
+#### `change_feed.csv`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `change_id` | Change record identifier | `C00001`, `C00002`… from a counter in `add_change()`; `M<hour>` for maintenance windows |
+| `kind` | `orchestrator_event` or `maintenance_window` | `add_change()` writes orchestrator events; `run()` adds one maintenance window per Tuesday and Thursday |
+| `nf_instance_id` | Instance concerned | The instance of the planned change; `*` for maintenance windows |
+| `ts_start` | Start of the change | Orchestrator events: event time minus a lag of 0–4 minutes (8 % of them 12–40 minutes, the late events); windows: 01:00 |
+| `ts_end` | End of the change | Orchestrator events: event time + 1 minute; windows: 05:00 |
+| `approved_edges` | New call edges declared by the change, as `consumer\|service\|operation`, separated by `;` | Filled only for the two NEF go-live records, from `EDGES["NEF"]`; empty otherwise |
+| `approved_from` | When the approved edges join the baseline | NEF registration time + 6 hours; empty otherwise |
+
+Orchestrator events are written for: initial registrations, autoscale and NEF go-live, rolling upgrades, slice launches, DR failover and failback, 70 % of certificate rotations, feature trials and remediations. Routine updates, NRF restarts, pod reschedules and attacks have none.
+
+#### `nrf_events.csv`
+
+One row per NRF registration (E1) or update (E2), written by `ev()` or by `legit_ev()`, which fills in the instance's legitimate identity. Rows are sorted by time.
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `evt_id` | Event identifier | `E000001`, `E000002`… in generation order, so not chronological |
+| `ts` | Time the NRF received the request | `T(h)` of the scenario |
+| `nf_instance_id` | `nfInstanceId` in the request URL | The instance's ID; rogue impostors use a new `<type>-<4 hex digits>` ID or a reserved ID |
+| `event_type` | `REGISTER` (E1) or `UPDATE` (E2) | Set by each scenario |
+| `nf_type` | Type in the registered profile | The instance's type |
+| `src_ip` | Source IP of the connection (E8) | Legitimate events: the registered IP (the DR IP during a failover); pod reschedules: a new pod address `10.{10+t}.1.x`; attacks: a foreign address `10.200–249.x.x`, or the DR IP for stealth hijacks |
+| `cert_san` | Name in the client certificate (E8) | Legitimate events: the instance's FQDN; attacks: the registered FQDN or a wrong name (`localhost`, `nrf.internal`, `pod-7f3a`) |
+| `cert_fp` | Certificate fingerprint (E8) | Legitimate events: `fp_at()`, the original `_hex(id)` replaced after each scheduled rotation; attacks: a new hash (`_hex(id + "dup")`, `_hex(id + "hj")`, `_hex(id + "x" + episode)`) or the stolen real fingerprint (stealth hijacks, 70 % of other hijacks) |
+| `profile_fqdn`, `profile_ip` | Address registered in the profile | Legitimate events: the instance's own; attacks: `<id>.lab.example.net`, look-alike FQDNs (`5gc-b`, `5gc-x`), foreign IPs, or the reserved ID's approved address |
+| `priority`, `capacity` | Selection attributes | 10 and 100 for every event, except rogue impostors and duplicate IDs: 1 and 65000, to win discovery |
+| `changed_paths` | Changed profile fields, JSON-Patch style, separated by `;` | `*new*` first registration; `/load` or `/load;/capacity` routine update (about 0.8 per instance per day); `/supportedFeatures` or empty rolling upgrade; `/amfInfo/taiList` or `/smfInfo/sNssaiSmfInfoList` slice launch; `/ipv4Addresses` DR failover and stealth hijack; `/fqdn;/ipv4Addresses` hijack with a changed FQDN; `/ipv4Addresses;/nfServiceEndpoints` duplicate ID; `/allowedNfTypes` (plus `;/udmInfo/supiRanges`) privilege widening; empty for NRF restarts and certificate rotations |
+| `n_ranges_added` | Subscriber ranges, TAIs or slices added | Slice launch 1–3; rogue impostor 1–3 (60 % of them); privilege widening 1–3 (50 %); 0 otherwise |
+| `n_allowlist_added` | Allow-list entries added | Slice launch 0–1; rogue impostor 1–2 (30 %); privilege widening 1–4; 0 otherwise |
+
+#### `post_register_traffic.csv`
+
+One row per `REGISTER` event, written by `add_post()`. `UPDATE` events (hijack, privilege widening) have none.
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `evt_id` | Link to the registration in `nrf_events.csv` | The `evt_id` returned by `ev()` |
+| `nf_instance_id` | Registering instance | |
+| `reg_ts` | Registration time | Same as the event's `ts` |
+| `ttft_s` | Seconds until the first request reached the instance | Drawn per scenario: initial 5–60; autoscale and NEF 60–900; rolling upgrade 30–300; DR 15–120; NRF restart 1–4; noisy impostor 3–90; stealth or reserved impostor 120–900; duplicate ID 5–120 |
+| `type_requests_10m` | Requests received by the whole NF type in the 10 minutes | `PRODUCER_LOAD[type] × NF_COUNTS[type] × diurnal(hour) / 6 × noise` (2 instances assumed for the NEF) |
+| `requests_10m` | Requests received by this instance in those 10 minutes | `share × type_requests_10m`, with `share` drawn per scenario: 1/N for initial registrations, DR and NRF restarts (N = number of instances of the type); 0.6–1.1 × 1/N rolling upgrade; 0–0.06 autoscale and NEF; 0.2–0.6 noisy impostor; 0.02–0.12 stealth or reserved impostor; 0.1–0.4 duplicate ID |
+
+#### `token_requests.csv`
+
+Hourly counts of access token requests (E7), written by `add_tokens()`. An instance-hour can have several rows (for example normal and attacker rows for a reused ID); `NRF_features.py` sums them.
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `window_start` | Hour | `win(h)` |
+| `nf_instance_id` | Requesting instance | Only consumer types (those in `EDGES`: AMF, SMF, AUSF, UDM, PCF, NEF) request tokens normally |
+| `n_requests` | Token requests in the hour | Normal: Poisson(6) per hour (`normal_traffic()`); attacks: Poisson(12) plus the mismatched ones (`_bad_tokens()`), or Poisson(6) + 2 (lateral edges) |
+| `n_sub_mismatch` | Requests whose claimed identity differs from the TLS certificate (E7 vs E8) | Normal: 1 in 0.3 % of hours (benign misconfiguration), else 0; attacks: Poisson(3) per hour in 45 % of impostor, 40 % of duplicate-ID and 30 % of hijack episodes; 2 per hour in 30 % of lateral-edge episodes |
+
+#### `sbi_calls.csv`
+
+Hourly roll-ups of SBI calls (E9) per consumer instance and edge, written by `add_calls()`.
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `window_start` | Hour | `win(h)` |
+| `nf_instance_id` | Consumer instance | The calling instance |
+| `consumer_type` | Consumer NF type | The caller's type; with `service` and `operation` it forms the call edge |
+| `service`, `operation` | Called service and operation template | Normal calls: each edge of `EDGES` for the caller's type; attacks and feature trials: a service the type is not allowed to call, chosen by `violating_edge()`, with its operation from `SERVICE_OP` |
+| `token_scope_service` | Service the presented token was issued for | Equal to `service`, except misused tokens: the caller's own first service in `EDGES` in 60 % of forbidden-call streams and 50 % of privilege-widening streams |
+| `n_calls` | Calls in the hour | Normal: Poisson(edge rate × diurnal × noise × ramp), rates from 60 to 800 per hour; feature trials Poisson(30–150); impostors copy their type's edges at Poisson(30); forbidden calls: 3–12 (low-and-slow), 30–400 (enforcement gap), 20–150 (probing), 30–300 (privilege widening), and 15–60 when impostors, duplicate IDs or hijacks also make forbidden calls |
+| `n_401`, `n_403`, `n_5xx` | Unauthorised, forbidden and server-error responses | Binomial draws: normal 0.05 % / 0 % / 0.2 %; enforcement gap 1 % / 3 % / 0.2 %; probing 5 % / 90 % / 0.2 %; privilege widening 1 % / 2 % / 0.2 % |
+| `n_2xx` | Successful responses | `n_calls − n_401 − n_403 − n_5xx`, never below 0 |
+
+#### `producer_load.csv`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `window_start` | Hour | Every hour from the instance's `live_from` to the end |
+| `nf_instance_id`, `nf_type` | Receiving instance and its type | Every deployed instance, plus rogue impostors during their episode |
+| `n_requests_received` | Requests received in the hour | `add_load()`: Poisson(`PRODUCER_LOAD[type]` × diurnal × ramp × noise); impostors × 0.1 (stealth or reserved) or × 0.4 (noisy). These rows define the instance-hours scored by the models. |
+
+#### `labels.csv`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `nf_instance_id`, `window_start` | Labelled instance-hour | `mark()` labels a range of hours for one instance |
+| `label` | 1 = anomaly, 0 = benign change | Attacks (`_inj_*()`) mark their episode hours with 1; benign scenarios mark their hours with 0. A benign mark never overwrites an anomaly. |
+| `subtype` | Anomaly type or benign change, e.g. `hijack`, `benign_nrf_resync` | Set by the scenario. Most benign marks cover the event hour; NEF go-live and feature trials 6 hours; inventory lag 24 hours |
+| `episode_id` | Episode of an anomaly | `EP000`… for anomalies; empty for benign changes |
+
+Plain normal hours are not written: any instance-hour missing from this file is normal.
+
+#### `episodes.csv`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `episode_id` | Episode identifier | `EP000` to `EP109`, numbered in the order of their drawn start times |
+| `subtype` | Anomaly type | Drawn by `inject()` with probabilities 0.25 rogue impostor, 0.15 duplicate ID, 0.20 hijack, 0.15 privilege widening, 0.25 lateral edge (`SUBTYPE_P`) |
+| `start_window` | Hour the episode starts | Uniform between the baseline end + 6 h and 14 h before the end; 25 % of impostor, duplicate-ID and privilege-widening episodes are moved into a nearby maintenance window. Each episode lasts 2–6 hours. |
+
+#### `meta.json`
+
+| Field | Meaning | How it is generated |
+|---|---|---|
+| `start` | Simulation start | `START`, 2026-01-05 00:00 |
+| `days`, `baseline_days` | Length of the dataset and of the clean baseline | Command-line options `--days` (45) and `--baseline-days` (10) |
+| `window` | Window size | Always `1h` |
+| `n_events`, `n_episodes` | Number of NRF events and anomaly episodes | Counted in `run()` |
+
+The random seed (`--seed`) is not stored.
 
 ### How to obtain each group of fields in a real network
 
