@@ -323,18 +323,20 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 
 ### The 10 raw tables
 
-| Table | Grain | Key columns | Simulated from | Real-world source |
-|---|---|---|---|---|
-| `inventory.csv` | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | OSS resource inventory (TM Forum TMF639), 5GC element queried with NRM, NFVO |
-| `policy_matrix.csv` | one row per (service, allowed consumer type) (15) | `service`, `allowed_consumer_type` | `EDGES` | TS 23.502 consumer lists, NRF `allowedNfTypes`, mesh authorization policy |
-| `change_feed.csv` | one row per orchestrator event or maintenance window (193) | `kind`, `nf_instance_id`, `ts_start`, `ts_end`, `approved_edges`, `approved_from` | scenario code | Orchestrator, GitOps, Kubernetes audit log, change calendar (ITSM) |
-| `nrf_events.csv` | one row per NRF registration or update (1,647) | profile fields, `changed_paths`, `n_ranges_added`, `n_allowlist_added`, TLS identity | scenario code | NRF access or audit log (E1, E2) + TLS metadata (E8) |
-| `post_register_traffic.csv` | one row per registration (258) | `ttft_s`, `requests_10m`, `type_requests_10m` | drawn per scenario | Join of E1 with the first E9 requests received |
-| `token_requests.csv` | one row per instance and hour (27,051) | `n_requests`, `n_sub_mismatch` | normal rates + attacks | NRF token-endpoint log (E7) joined with E8 |
-| `sbi_calls.csv` | one row per hour, consumer instance, service, operation, token scope (85,654) | `consumer_type`, `service`, `operation`, `token_scope_service`, `n_calls`, `n_2xx`, `n_401`, `n_403`, `n_5xx` | `EDGES` + attacks | SCP or mesh access logs (E9) |
-| `producer_load.csv` | one row per live instance and hour (38,747) | `n_requests_received` | `PRODUCER_LOAD` | Producer metrics or SCP logs grouped by destination |
-| `labels.csv` | one row per non-normal instance-hour (844) | `label`, `subtype`, `episode_id` | injected episodes | SOC incidents, red-team or injected tests |
-| `episodes.csv` | one row per anomaly episode (110) | `episode_id`, `subtype`, `start_window` | injected episodes | incident records |
+The **Events used** column shows which event tags (see [Event tags E1 to E9](#event-tags-e1-to-e9)) each table is built from. Tables marked *none* come from management, configuration or ground-truth data, not from protocol events. No table uses E3–E6.
+
+| Table | Events used | Grain | Key columns | Simulated from | Real-world source |
+|---|---|---|---|---|---|
+| `inventory.csv` | none (management data) | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | OSS resource inventory (TM Forum TMF639), 5GC element queried with NRM, NFVO |
+| `policy_matrix.csv` | none (specs and configuration) | one row per (service, allowed consumer type) (15) | `service`, `allowed_consumer_type` | `EDGES` | TS 23.502 consumer lists, NRF `allowedNfTypes`, mesh authorization policy |
+| `change_feed.csv` | none (orchestration and change data) | one row per orchestrator event or maintenance window (193) | `kind`, `nf_instance_id`, `ts_start`, `ts_end`, `approved_edges`, `approved_from` | scenario code | Orchestrator, GitOps, Kubernetes audit log, change calendar (ITSM) |
+| `nrf_events.csv` | E1, E2, E8 | one row per NRF registration or update (1,647) | profile fields, `changed_paths`, `n_ranges_added`, `n_allowlist_added`, TLS identity | scenario code | NRF access or audit log (E1, E2) + TLS metadata (E8) |
+| `post_register_traffic.csv` | E1, E9 | one row per registration (258) | `ttft_s`, `requests_10m`, `type_requests_10m` | drawn per scenario | Join of E1 with the first E9 requests received |
+| `token_requests.csv` | E7, E8 | one row per instance and hour (27,051) | `n_requests`, `n_sub_mismatch` | normal rates + attacks | NRF token-endpoint log (E7) joined with E8 |
+| `sbi_calls.csv` | E9 (token scope from the token issued at E7) | one row per hour, consumer instance, service, operation, token scope (85,654) | `consumer_type`, `service`, `operation`, `token_scope_service`, `n_calls`, `n_2xx`, `n_401`, `n_403`, `n_5xx` | `EDGES` + attacks | SCP or mesh access logs (E9) |
+| `producer_load.csv` | E9 | one row per live instance and hour (38,747) | `n_requests_received` | `PRODUCER_LOAD` | Producer metrics or SCP logs grouped by destination |
+| `labels.csv` | none (ground truth) | one row per non-normal instance-hour (844) | `label`, `subtype`, `episode_id` | injected episodes | SOC incidents, red-team or injected tests |
+| `episodes.csv` | none (ground truth) | one row per anomaly episode (110) | `episode_id`, `subtype`, `start_window` | injected episodes | incident records |
 
 `meta.json` stores the start time, the number of days, the baseline length and counts.
 
