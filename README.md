@@ -280,7 +280,7 @@ flowchart LR
     T["E8: mutual TLS on every connection"] -.-> NRF
     T -.-> SCP
     O["Orchestrator, GitOps, Kubernetes audit"] --> L4[/"change feed"/]
-    D["Resource inventory, 3GPP NRM, NFVO"] --> L5[/"inventory"/]
+    D["OSS resource inventory, 5GC element queried with NRM, NFVO"] --> L5[/"inventory"/]
     S["TS 23.502, NRF allow-lists, mesh policy"] --> L6[/"policy matrix"/]
 ```
 
@@ -310,7 +310,7 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 
 | Table | Grain | Key columns | Simulated from | Real-world source |
 |---|---|---|---|---|
-| `inventory.csv` | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | Resource inventory (TM Forum TMF639), 3GPP NRM, NFVO |
+| `inventory.csv` | one row per approved NF instance (45) | `nf_instance_id`, `nf_type`, `fqdn`, `approved_ips` (primary and DR), `live_from`, `known_from` | instance catalogue | OSS resource inventory (TM Forum TMF639), 5GC element queried with NRM, NFVO |
 | `policy_matrix.csv` | one row per (service, allowed consumer type) (15) | `service`, `allowed_consumer_type` | `EDGES` | TS 23.502 consumer lists, NRF `allowedNfTypes`, mesh authorization policy |
 | `change_feed.csv` | one row per orchestrator event or maintenance window (193) | `kind`, `nf_instance_id`, `ts_start`, `ts_end`, `approved_edges`, `approved_from` | scenario code | Orchestrator, GitOps, Kubernetes audit log, change calendar (ITSM) |
 | `nrf_events.csv` | one row per NRF registration or update (1,647) | profile fields, `changed_paths`, `n_ranges_added`, `n_allowlist_added`, TLS identity | scenario code | NRF access or audit log (E1, E2) + TLS metadata (E8) |
@@ -347,7 +347,7 @@ The simulator writes the **raw tables** a real deployment would collect. The fea
 - `producer_load` and the post-registration traffic come from the same logs grouped by destination, or from producer metrics (for example Prometheus counters).
 
 **Inventory, change control and policy.**
-- `inventory.csv`: the operator's **resource inventory** (TM Forum TMF639 Resource Inventory API), the **3GPP NRM** of the configured NFs (TS 28.541 managed objects such as `AMFFunction` and `NRFFunction`, read through the provisioning management service of TS 28.532) and the NFVO deployment records. It includes the approved IPs per instance (often from IPAM) and the time each entry was created (`known_from`).
+- `inventory.csv`: the **OSS resource inventory** (TM Forum TMF639 Resource Inventory API), the **5GC element queried with NRM**, meaning the core's element or domain manager, or the NFs themselves, read through the 3GPP provisioning management service (TS 28.532) with data modelled by the NRM (TS 28.541 managed objects such as `AMFFunction` and `NRFFunction`), and the NFVO deployment records. It includes the approved IPs per instance (often from IPAM) and the time each entry was created (`known_from`).
 - `change_feed.csv`: orchestrator events per instance, GitOps commits, Kubernetes audit events and the approved maintenance calendar. `approved_edges` corresponds to new call relationships declared in a change ticket.
 - `policy_matrix.csv`: start from the TS 23.502 "known NF service consumers", reconcile with the live NRF allow-lists and the mesh authorization policy, and keep it under version control. Mismatches between these sources are findings in themselves.
 

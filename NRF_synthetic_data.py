@@ -6,7 +6,8 @@ SCP/mesh call roll-ups, inventory and change feed). `features.py` turns them int
 features; no feature is computed here, and the ground truth lives only in labels.csv / episodes.csv.
 
 Raw tables written to --out (CSV):
-  inventory.csv               resource inventory (TM Forum TMF639 / 3GPP NRM, NFVO): approved NF instances, FQDNs, approved IPs, known_from
+  inventory.csv               OSS resource inventory (TM Forum TMF639), 5GC element queried with NRM, NFVO:
+                              approved NF instances, FQDNs, approved IPs, known_from
   change_feed.csv             orchestrator events (instance-specific) + maintenance windows
   policy_matrix.csv           (service, allowed consumer NF type): 3GPP procedures + NRF allow-lists
   nrf_events.csv              E1/E2: NFRegister / NFUpdate (profile, TLS identity, JSON-patch paths)
