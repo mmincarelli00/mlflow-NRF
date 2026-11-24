@@ -286,20 +286,35 @@ flowchart LR
 
 ### Event tags E1 to E9
 
-E1–E9 are this project's own shorthand for "the protocol event a feature is extracted from". They are not 3GPP names. Each maps to a 3GPP operation, except E8, which is the TLS layer under every SBI connection.
+E1–E9 are this project's own shorthand for "the protocol event a feature is extracted from". They are not 3GPP names. Each maps to a 3GPP operation, except E8, which is the TLS layer under every SBI connection. **Only E1, E2, E7, E8 and E9 are used by this project; E3–E6 are listed for completeness and marked *(unused)*.**
 
 | Tag | Name | 3GPP service / mechanism | HTTP request | From → to | Spec | Observed at | In the simulation |
 |---|---|---|---|---|---|---|---|
 | **E1** | NF registration | Nnrf_NFManagement, NFRegister | `PUT /nnrf-nfm/v1/nf-instances/{nfInstanceId}` | NF → NRF | TS 29.510 | NRF access or audit log | `nrf_events.csv`, `REGISTER` |
 | **E2** | NF profile update (also heartbeats) | Nnrf_NFManagement, NFUpdate | `PATCH` (JSON Patch) or `PUT` on the same resource | NF → NRF | TS 29.510 | NRF access or audit log | `nrf_events.csv`, `UPDATE` (no heartbeats) |
-| E3 | NF deregistration | Nnrf_NFManagement, NFDeregister | `DELETE /nnrf-nfm/v1/nf-instances/{nfInstanceId}` | NF → NRF | TS 29.510 | NRF access log | not generated |
-| E4 | Status subscription | Nnrf_NFManagement, NFStatusSubscribe | `POST /nnrf-nfm/v1/subscriptions` | NF → NRF | TS 29.510 | NRF access log | not generated |
-| E5 | Status notification | Nnrf_NFManagement, NFStatusNotify | `POST` to the subscriber's callback URI | NRF → NF | TS 29.510 | NRF outbound log | not generated |
-| E6 | NF discovery | Nnrf_NFDiscovery | `GET /nnrf-disc/v1/nf-instances?target-nf-type=…` | NF or SCP → NRF | TS 29.510 | NRF access log | not generated |
+| E3 *(unused)* | NF deregistration | Nnrf_NFManagement, NFDeregister | `DELETE /nnrf-nfm/v1/nf-instances/{nfInstanceId}` | NF → NRF | TS 29.510 | NRF access log | **Not used**: not generated |
+| E4 *(unused)* | Status subscription | Nnrf_NFManagement, NFStatusSubscribe | `POST /nnrf-nfm/v1/subscriptions` | NF → NRF | TS 29.510 | NRF access log | **Not used**: not generated |
+| E5 *(unused)* | Status notification | Nnrf_NFManagement, NFStatusNotify | `POST` to the subscriber's callback URI | NRF → NF | TS 29.510 | NRF outbound log | **Not used**: not generated |
+| E6 *(unused)* | NF discovery | Nnrf_NFDiscovery | `GET /nnrf-disc/v1/nf-instances?target-nf-type=…` | NF or SCP → NRF | TS 29.510 | NRF access log | **Not used**: not generated |
 | **E7** | Access token request | Nnrf_AccessToken (OAuth 2.0 client credentials) | `POST /oauth2/token` | NF → NRF | TS 29.510, TS 33.501 | NRF token-endpoint log | `token_requests.csv` |
 | **E8** | TLS identity | Mutual TLS handshake (not a 3GPP message) | none: certificate SAN, fingerprint, source IP | both sides | TS 33.501 | Where TLS terminates: NRF, SCP, sidecar | `src_ip`, `cert_san`, `cert_fp` in `nrf_events.csv` |
 | **E9** | SBI service call | Any NF-to-NF service | Any method and path, `Authorization: Bearer <token>` | consumer → producer, directly or via SCP | TS 29.500, TS 23.501 Annex E | SCP or mesh access logs, producer metrics | `sbi_calls.csv`, `producer_load.csv`, `post_register_traffic.csv` |
 
+
+#### Why E3–E6 are not used
+
+E3–E6 are **not used in the simulation**: `NRF_synthetic_data.py` generates no deregistrations, status subscriptions, notifications or discovery requests, and **none of the 10 raw tables contains E3–E6 data**. `nrf_events.csv` holds only `REGISTER` (E1) and `UPDATE` (E2) events. The tags appear in the Python docstrings only as part of the full E1–E9 reference table, where they are marked "not generated".
+
+They were left out on purpose, for three reasons:
+
+1. **They serve other anomaly classes.** This project targets rogue or changed registrations and new call edges, which are best seen in the registration content (E1, E2), the connection identity (E8), the tokens (E7) and the calls (E9). E3–E6 matter mostly for other problems:
+    - **E3** deregistration: NF flapping, register/deregister loops;
+    - **E4 / E5** status subscriptions and notifications: reconnaissance (subscribing to every NF type), callbacks pointing outside the operator's domain;
+    - **E6** discovery: discovery sweeps, or a consumer claiming a different NF type than its certificate shows.
+2. **They are costly to simulate realistically.** Discovery and notifications need credible normal behaviour (caching, validity periods, notification fan-out) plus their own benign cases and attacks, which would have grown the generator well beyond the target class.
+3. **Their main effect is already captured.** The consequence of discovery that matters here, a rogue NF winning selection and pulling traffic, is measured directly by `time_to_first_traffic_s` and `new_instance_traffic_share_10m`. NRF restarts are modelled as mass re-registrations (E1) instead of deregistration followed by registration.
+
+Adding E3–E6 is listed in the [next steps](#13-next-steps) as a way to extend the detector to these other anomaly classes.
 ---
 
 ## 4. Data sources: where the fields come from and how to get them in a real network
