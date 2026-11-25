@@ -36,7 +36,7 @@
     - [Run the pipeline](#run-the-pipeline)
 9. [Machine learning models and evaluation protocol](#9-machine-learning-models-and-evaluation-protocol)
     - [The six families](#the-six-families)
-    - [Protocol](#protocol)
+    - [Time interval split](#time-interval-split)
     - [Metrics (identical for all families)](#metrics-identical-for-all-families)
 10. [Results](#10-results)
     - [Validation (best trial per family)](#validation-best-trial-per-family)
@@ -671,16 +671,16 @@ Every family implements `fit(X)` and `score(X)` on the 16-column risk matrix; a 
 
 The mix covers statistics, unsupervised trees, density, supervised learning, expert rules and a hybrid. The data is mostly rare 0/1 flags with about 1 % anomalous rows, which favours rules and trees over distance-based methods. Each family is wrapped as an MLflow `pyfunc` model (`ScoreModel`) and registered as `nrf-<family>`.
 
-### Protocol
+### Time interval split
 
 - **Unit:** one row per NF instance per hour (38,745 rows).
 - **Time-based split**, never random, so that hours of the same episode never leak between splits:
 
 | Split | Period | Rows | Anomalous rows | Episodes | Used for |
 |---|---|---|---|---|---|
-| Train | until 2 Feb (includes the 10-day clean baseline) | 23,117 | 239 | 60 | Fitting the models |
-| Validation | 2–9 Feb | 6,166 | 103 | 22 | Choosing hyper-parameters and freezing the alert threshold |
-| Test | 9–19 Feb | 9,462 | 111 | 28 | Final, untouched scoring and comparison |
+| Train | 5 Jan – 1 Feb (includes the 10-day clean baseline, 5–14 Jan) | 23,117 | 239 | 60 | Fitting the models |
+| Validation | 2–8 Feb | 6,166 | 103 | 22 | Choosing hyper-parameters and freezing the alert threshold |
+| Test | 9–18 Feb | 9,462 | 111 | 28 | Final, untouched scoring and comparison |
 
 - **Best trial per family:** highest validation PR-AUC (ties: episode recall).
 - **Alert threshold:** the score exceeded by only 0.5 % of validation's normal rows, then frozen for test.
