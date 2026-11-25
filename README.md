@@ -373,7 +373,7 @@ The field descriptions in this section refer to these elements by their exact na
 | `nf_type` | NF type | The type given to each instance in the *Instance catalogue*: 33 base instances from `NF_COUNTS`, 5 autoscale from `AUTOSCALE_EXTRA`, 2 NEF, 5 reserved |
 | `fqdn` | Approved FQDN | `<id>.5gc.mnc001.mcc001.3gppnetwork.org` |
 | `approved_ips` | Approved primary and disaster-recovery (DR) addresses, separated by `\|` | Primary `10.{10+t}.0.{k}`, DR `10.{110+t}.0.{k}`, where `t` is the position of the NF type in `TYPE_IDX` and `k` the instance number |
-| `live_from` | When the instance is deployed | *Simulation clock* time `T(live_h)`: hour 0 for base instances; a random moment in the *Maintenance windows* at least one day after the baseline for autoscale; a *Maintenance windows* slot around baseline + 5 days for the NEF; 5 years later (never) for the reserved IDs |
+| `live_from` | When the instance is deployed; empty if it is not deployed | *Simulation clock* time `T(live_h)`: hour 0 for base instances; a random moment in the *Maintenance windows* at least one day after the baseline for autoscale; a *Maintenance windows* slot around baseline + 5 days for the NEF; **empty** for the 5 reserved IDs, which are never deployed. Internally the generator still gives them a deployment hour 5 years after the start, so they never get traffic, but the CSV leaves the field empty, as a real inventory would for an instance not yet deployed |
 | `known_from` | When the resource inventory knows about the instance | The *Simulation clock* start, except `amf-07` and `amf-08`, which get `live_from` + 24 h (inventory lag) |
 
 #### `policy_matrix.csv`
@@ -797,7 +797,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 - **The policy matrix equals the normal traffic by construction** (both come from `EDGES`), except where it is deliberately stale (feature trials).
 - **Probing lateral edges keep about 5 % of 2xx responses** because the denial rates do not sum to 100 %, so they can also trigger the policy-violation feature.
 - **Features keyed by instance ID**: when an attacker reuses a real ID, its activity is merged with the legitimate instance's row.
-- **`id_in_inventory` checks `known_from` only**: a reserved but never-deployed ID passes; checking `live_from` too would catch the reserved-ID impostor.
+- **`id_in_inventory` checks `known_from` only**: a reserved but never-deployed ID (empty `live_from`) passes; also checking that `live_from` is set and not later than the event would catch the reserved-ID impostor.
 - **The raw traffic share depends on the number of peers** of each NF type (an NSSF restart scores 0.5, a UDM duplicate 0.37).
 - **Single seed, single time split**, and the random seed is not recorded in `meta.json`.
 
@@ -809,7 +809,7 @@ Seed 7, default settings. Thresholds were frozen on validation.
 - Make the identity rules **orchestration-aware**: an unknown ID or address counts much less when the registration matched an orchestrator event (removes most inventory-lag false alarms).
 - Add a dedicated **hijack rule**: "second source **and** no orchestration" with a higher weight.
 - Replace the raw traffic share with **`share_vs_fair = share × number of registered instances of the type`**.
-- Check `live_from` as well as `known_from` in `id_in_inventory`.
+- Check `live_from` as well as `known_from` in `id_in_inventory`: activity from an instance whose `live_from` is empty or still in the future is suspicious.
 
 **Make the evaluation robust**
 - Run the pipeline on **5–10 seeds** and report mean ± spread.

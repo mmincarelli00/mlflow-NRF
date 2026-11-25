@@ -602,7 +602,9 @@ class Simulator:
             self.changes.append(dict(change_id=f"M{s}", kind="maintenance_window", nf_instance_id="*", ts_start=self.T(s),
                                      ts_end=self.T(e), approved_edges="", approved_from=None))
         inv = pd.DataFrame([dict(nf_instance_id=i["id"], nf_type=i["type"], fqdn=i["fqdn"],
-                                 approved_ips=f"{i['ip']}|{i['dr_ip']}", live_from=self.T(i["live_h"]),
+                                 approved_ips=f"{i['ip']}|{i['dr_ip']}",
+                                 # reserved IDs are never deployed: empty live_from, as in a real inventory
+                                 live_from=None if i["kind"] == "reserved" else self.T(i["live_h"]),
                                  known_from=self.T(i.get("known_h", 0)))
                             for i in self.insts.values()])
         events = pd.DataFrame(self.events).sort_values("ts")
