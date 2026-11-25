@@ -196,6 +196,8 @@ This repository is an end-to-end experiment for a communications service provide
 2. **Build 14 security features** per NF instance and per hour from that telemetry.
 3. **Train and compare six anomaly-detection model families** (from a RobustZ baseline to rules, unsupervised ML, supervised ML and a hybrid), with every run, metric and model tracked in **MLflow**.
 
+The simulated period covers 45 days in hourly windows, from 5 January to 18 February 2026 (synthetic dates set in the generator). The first 10 days (5–14 January) are a clean baseline; the data is then split by time into training (up to 1 February), validation (2–8 February) and test (9–18 February).
+
 > All data in this repository is **synthetic**. The results show that the feature set and the comparison pipeline work, not how the models would perform on a real network. The data sources section explains how to replace the simulator with real NRF, SCP and inventory data.
 
 ### The problem
