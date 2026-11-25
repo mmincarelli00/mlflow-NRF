@@ -300,7 +300,7 @@ E1–E9 are this project's own shorthand for "the protocol event a feature is ex
 | E5 *(unused)* | Status notification | Nnrf_NFManagement, NFStatusNotify | `POST` to the subscriber's callback URI | NRF → NF | TS 29.510 | NRF outbound log | **Not used**: not generated |
 | E6 *(unused)* | NF discovery | Nnrf_NFDiscovery | `GET /nnrf-disc/v1/nf-instances?target-nf-type=…` | NF or SCP → NRF | TS 29.510 | NRF access log | **Not used**: not generated |
 | **E7** | Access token request | Nnrf_AccessToken (OAuth 2.0 client credentials) | `POST /oauth2/token` | NF → NRF | TS 29.510, TS 33.501 | NRF token-endpoint log | `token_requests.csv` |
-| **E8** | TLS identity | Mutual TLS handshake (not a 3GPP message) | none: certificate SAN, fingerprint, source IP | both sides | TS 33.501 | Where TLS terminates: NRF, SCP, sidecar | `src_ip`, `cert_san`, `cert_fp` in `nrf_events.csv` |
+| **E8** | TLS identity | Mutual TLS handshake (not a 3GPP message) | none: certificate SAN, fingerprint, source IP | both sides (client and server authenticate each other on every SBI connection) | TS 33.501 | Where TLS terminates: NRF, SCP, or a sidecar proxy (typically an Envoy container, part of Istio or a similar service mesh, running in the same pod as the NF) | `src_ip`, `cert_san`, `cert_fp` in `nrf_events.csv` |
 | **E9** | SBI service call | Any NF-to-NF service | Any method and path, `Authorization: Bearer <token>` | consumer → producer, directly or via SCP | TS 29.500, TS 23.501 Annex E | SCP or mesh access logs, producer metrics | `sbi_calls.csv`, `producer_load.csv`, `post_register_traffic.csv` |
 
 
