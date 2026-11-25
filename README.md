@@ -576,15 +576,148 @@ Before modelling, `risk_matrix()` turns the 16 columns into inputs where **highe
 
 ### Five anomaly types (110 episodes, 2–6 hours each)
 
-| Type | What is attacked | NRF event | Identity looks clean? | Main traces |
-|---|---|---|---|---|
-| `rogue_impostor` | A **new** fake NF registers with priority 1 and capacity 65000 to attract traffic. Variants: noisy, stealth, and squatting a reserved inventory ID with its approved IP. | REGISTER | Sometimes (reserved variant) | Unknown ID or address, certificate mismatch, no orchestration, fast traffic grab, token mismatch, new edges |
-| `duplicate_id` | A **real** NF's ID is registered again from another source | REGISTER | No | Second source for the ID, unknown address, no orchestration, high diff score |
-| `hijack` | A **real** NF's address is changed by an update. Stealth variant uses the approved DR IP and a stolen certificate. | UPDATE | Sometimes (stealth) | Second source, no orchestration, outside the window |
-| `privilege_widening` | A **real** producer's allow-list is widened; a forbidden consumer type then calls it successfully | UPDATE | Yes | Allow-list and range additions, then new edge + policy violation + scope mismatch on the consumer |
-| `lateral_edge` | A **real** NF calls a service it should not. Enforcement-gap, probing and low-and-slow variants. | none | Yes | New edge, policy violation, denied share on new edges, token scope mismatch |
+`inject()` creates 110 attack episodes after the clean baseline. Each episode draws its type at random (`SUBTYPE_P`), starts at a random hour, lasts 2–6 hours, and is built by its own `_inj_*()` function. Attacks are never orchestrated; 25 % of rogue-impostor, duplicate-ID and privilege-widening episodes are deliberately placed inside a maintenance window to look planned. Episodes on real instances end with an orchestrated **remediation** that restores the profile.
 
-Episodes on real instances end with an orchestrated **remediation** that restores the profile.
+| Type | Episodes | What is attacked | NRF event | Identity looks clean? | Main traces |
+|---|---|---|---|---|---|
+| `rogue_impostor` | 30 | A **new** fake NF registers with priority 1 and capacity 65000 to attract traffic. Variants: noisy, stealth, and reserved (squatting a reserved inventory ID with its approved IP). | REGISTER | Sometimes (reserved variant) | Unknown ID or address, certificate mismatch, no orchestration, fast traffic grab, token mismatch, new edges |
+| `duplicate_id` | 20 | A **real** NF's ID is registered again from another source | REGISTER | No | Second source for the ID, unknown address, no orchestration, high diff score |
+| `hijack` | 19 | A **real** NF's address is changed by an update. Stealth variant uses the approved DR IP and a stolen certificate. | UPDATE | Sometimes (stealth) | Second source, no orchestration, outside the window |
+| `privilege_widening` | 16 | A **real** producer's allow-list is widened; a forbidden consumer type then calls it successfully | UPDATE | Yes | Allow-list and range additions, then new edge + policy violation + scope mismatch on the consumer |
+| `lateral_edge` | 25 | A **real** NF calls a service it should not. Enforcement-gap, probing and low-and-slow variants. | none | Yes | New edge, policy violation, denied share on new edges, token scope mismatch |
+
+The details below describe each type and its variants. The examples are real episodes from the dataset generated with the default settings (`--seed 7`); times are in seconds, and the traffic share is the share of the NF type's requests received in the first 10 minutes after registration.
+
+#### `rogue_impostor`: a fake NF registers
+
+**What happens.** An attacker registers a new NF of a sensitive type (SMF, UDM, AUSF, UDR or PCF; the reserved variant can also take the reserved AMF ID) with the best selection values (priority 1, capacity 65000), so that discovery steers consumers to it. A fake AUSF can capture authentication data, a fake UDM or UDR subscriber data, a fake SMF sessions.
+
+**Common to all variants.**
+- One `REGISTER` with `changed_paths` = `*new*`, no orchestrator event.
+- In 60 % of cases it claims 1–3 ranges, and in 30 % it adds 1–2 allow-list entries.
+- In 45 % of episodes its token requests carry an identity that differs from its certificate.
+- It copies the normal call edges of its type at low volume, and sometimes makes forbidden calls.
+- It exists only for its episode (2–6 hours) and then disappears; there is no remediation.
+
+**Variants.**
+
+| Variant | Share | Identity | Traffic | How it is spotted |
+|---|---|---|---|---|
+| **Noisy** | 35 % | New random ID (e.g. `smf-eda2`), FQDN outside the operator domain (`<id>.lab.example.net`), foreign IP (`10.200–249.x.x`); certificate name matches in 30 % of cases | First request after 3–90 s, 20–60 % traffic share; forbidden calls in 65 % of episodes, about 60 per hour | Easy: unknown ID, foreign address, often a wrong certificate name, a traffic spike |
+| **Stealth** | 30 % | New random ID, realistic FQDN (`<id>.5gc.mnc001.mcc001.3gppnetwork.org`), foreign IP; certificate name matches in 50 % of cases | First request after 120–900 s, 2–12 % share, similar to an autoscale (60–900 s); forbidden calls in 35 % of episodes, about 15 per hour | Its ID and address are still unknown to the inventory |
+| **Reserved** | 35 % | A **reserved inventory ID** (e.g. `smf-09`) with its inventory FQDN and **approved IP**; certificate name matches in 60 % of cases | Same as stealth | Hardest: the ID and address are in the inventory, so the identity checks pass; mainly the missing orchestration gives it away |
+
+- **Noisy** grabs traffic aggressively and fast, which is why its time to first traffic is short.
+- **Stealth** imitates a normal new instance: a realistic name and a slow, small ramp-up.
+- **Reserved** is stealth plus a stolen identity.
+
+**Examples.**
+
+| Episode | Variant | Registration | Result |
+|---|---|---|---|
+| EP004 | Noisy | `smf-eda2` registers as `smf-eda2.lab.example.net` from `10.236.85.169`, priority 1 | First request after 69 s, 25 % of the SMF traffic |
+| EP014 | Noisy | `pcf-134f` registers as `pcf-134f.lab.example.net` from `10.201.138.161`, claiming 2 ranges and 1 allow-list entry | First request after 64 s, 37 % of the PCF traffic |
+| EP009 | Stealth | `udr-64d8` registers as `udr-64d8.5gc.mnc001.mcc001.3gppnetwork.org` from `10.226.132.218`, certificate name `localhost`, claiming 2 ranges | First request after 544 s, 4 % share |
+| EP068 | Reserved | `smf-09` (reserved, never deployed) registers from its approved IP `10.11.0.9` with a matching certificate name, claiming 2 ranges | First request after 462 s, 6 % share |
+
+> Modelling note: all three variants register with priority 1 and capacity 65000. In a real network the stealth and reserved variants would therefore also attract traffic quickly; their slow ramp-up is a choice made to make them harder to detect.
+
+#### `duplicate_id`: a real NF's ID is registered again
+
+**What happens.** An attacker registers with the `nfInstanceId` of an existing, legitimate instance, from another machine. In 3GPP a registration with an existing ID **replaces that instance's profile** in the NRF, so consumers are sent to the attacker, while the real instance keeps sending heartbeats from its own address: the registry flips between two sources.
+
+**How it is simulated.**
+- Target: an existing AMF, SMF, UDM, AUSF, UDR or PCF.
+- One `REGISTER` from a foreign IP, with a **new certificate fingerprint**, priority 1 and capacity 65000; `changed_paths` = `/ipv4Addresses;/nfServiceEndpoints`; no orchestrator event.
+- The ID is already known to consumers, so traffic arrives fast: first request after 5–120 s, 10–40 % share.
+- In 40 % of episodes its token requests carry a mismatched identity; in 30 % it also makes forbidden calls.
+- An orchestrated remediation restores the real profile at the end.
+
+**Sub-cases.**
+
+| Sub-case | Episodes | Description |
+|---|---|---|
+| Same FQDN | 11 | Registers with the real FQDN, only the address changes |
+| Look-alike FQDN | 9 | Registers a look-alike FQDN (`<id>.5gc-b.mnc001.mcc001.3gppnetwork.org`) |
+
+In both, the certificate name matches the registered FQDN in half the cases; otherwise it is `localhost`. It is spotted mainly by `second_source_for_id` (same ID, different certificate and source), an address not in the inventory and the missing orchestration.
+
+**Examples.**
+
+| Episode | Sub-case | Registration | Result |
+|---|---|---|---|
+| EP027 | Same FQDN | `ausf-02` re-registered from `10.242.206.29` with its real FQDN, certificate name `localhost` | First request after 97 s, 36 % of the AUSF traffic |
+| EP007 | Look-alike FQDN | `ausf-02` re-registered as `ausf-02.5gc-b.mnc001.mcc001.3gppnetwork.org` from `10.200.61.3`, certificate issued for the look-alike name | First request after 81 s, 23 % share |
+
+#### `hijack`: a real NF's address is changed
+
+**What happens.** Instead of registering, the attacker sends an **update** (`PATCH`) to an existing profile that changes its IP, and sometimes its FQDN. Consumers follow the profile to the new address. This needs a stolen NF credential or a compromised NF or management path.
+
+**How it is simulated.**
+- Target: an existing AMF, SMF, UDM, AUSF, UDR, PCF or NSSF.
+- One `UPDATE` with `changed_paths` = `/ipv4Addresses`, or `/fqdn;/ipv4Addresses` when the FQDN also changes; no orchestrator event.
+- No `REGISTER`, so no time-to-first-traffic or traffic share.
+- In 30 % of episodes token identities mismatch; in 25 % it also makes forbidden calls.
+- An orchestrated remediation restores the profile at the end.
+
+**Variants.**
+
+| Variant | Episodes | Description | How it is spotted |
+|---|---|---|---|
+| Foreign IP | 10 | Moves the profile to a foreign IP. In 6 of them the FQDN also changes to a look-alike (`<id>.5gc-x…`); the certificate name is wrong in 30 % and the fingerprint new in 30 % of cases | Unknown address, second source, no orchestration, sometimes a certificate mismatch |
+| Stealth (DR IP) | 9 | Moves the profile to the instance's **approved DR IP**, keeping the real FQDN and the stolen real certificate | Hard: address and certificate checks pass; only the second source, the missing orchestration and the time outside maintenance windows remain. Its benign twin is a real DR failover, which is orchestrated |
+
+**Examples.**
+
+| Episode | Variant | Update |
+|---|---|---|
+| EP001 | Foreign IP | `amf-04`'s address changed to `10.214.190.105`, same FQDN, real certificate name |
+| EP013 | Foreign IP, FQDN changed | `udr-01` changed to `udr-01.5gc-x.mnc001.mcc001.3gppnetwork.org` at `10.200.89.244` (`/fqdn;/ipv4Addresses`) |
+| EP015 | Stealth (DR IP) | `smf-02` moved to its approved DR IP `10.111.0.2`, same FQDN and certificate |
+
+#### `privilege_widening`: a producer's allow-list is widened
+
+**What happens.** A producer's profile is changed so that an NF type that should not call it becomes allowed. The NRF then issues that type access tokens, and its calls are formally authorised. This can come from a compromised management path or a malicious change.
+
+**How it is simulated.**
+- The producer (a UDM, UDR, AUSF or PCF) sends an `UPDATE` from its **own legitimate identity**, adding 1–4 entries to `allowedNfTypes`; in 10 of the 16 episodes it also adds 1–3 SUPI ranges (`/allowedNfTypes;/udmInfo/supiRanges`). No orchestrator event.
+- A consumer instance of a previously forbidden type then calls one of the producer's services for the rest of the episode, 30–300 calls per hour, almost all answered 2xx (2 % refused); in 50 % of episodes it uses a token issued for another service.
+- Both instances are labelled with the same episode: the producer's update hour and the consumer's call hours.
+- An orchestrated remediation reverts the allow-list.
+
+It is spotted by `allowlist_widened`, `ranges_added` and the missing orchestration on the producer, and by `edge_is_new`, `edge_policy_violation` and `token_scope_vs_call_mismatch` on the consumer. The independent policy matrix is essential here: the NRF now considers the calls allowed.
+
+**Examples.**
+
+| Episode | Producer update | Consumer calls |
+|---|---|---|
+| EP010 | `udm-04` adds 2 allow-list entries and 3 SUPI ranges | `pcf-01` (a PCF, not allowed on this service) makes 339 `Nudm_EventExposure` `POST /{ueIdentity}/subscriptions` calls in 2 hours, 333 answered 2xx |
+| EP067 | `udr-03` adds 3 allow-list entries and 1 SUPI range | `upf-02` (a UPF) makes 407 `Nudr_DR` `GET /subscription-data/{ueId}/provisioned-data` calls in 2 hours, 392 answered 2xx, with a token issued for `Nudm_SDM` |
+
+#### `lateral_edge`: a real NF calls a service it should not
+
+**What happens.** A legitimate NF is compromised and used to reach services outside its role, for example an AMF reading subscriber data from the UDR or creating event-exposure subscriptions to track subscribers. Nothing changes in the NRF, so only the call-edge and token features can see it.
+
+**How it is simulated.**
+- An existing AMF, SMF, PCF, UDM, AUSF or UPF calls a service its type is not allowed to call (chosen by `violating_edge()`), for 2–6 hours. No NRF event.
+- In 60 % of episodes it presents a token issued for another service (its own usual service); in 30 % its token requests also carry a mismatched identity.
+
+**Variants.**
+
+| Variant | Share | Calls | How it is spotted |
+|---|---|---|---|
+| **Enforcement gap** | 55 % | 30–400 per hour, mostly answered 2xx (1 % 401, 3 % 403): the access control failed | New edge, policy violation, token scope mismatch |
+| **Probing** | 45 % | 20–150 per hour, about 90 % refused with 403 and 5 % with 401 | New edge, high denied share on new edges |
+| **Low-and-slow** | 30 % of either | Only 3–12 calls per hour | Same signals, but at a volume that is invisible to traffic or error-rate monitoring |
+
+**Examples.**
+
+| Episode | Variant | Calls |
+|---|---|---|
+| EP055 | Enforcement gap | `amf-01` → `Nudr_DR` `GET /subscription-data/{ueId}/provisioned-data`: 586 calls in 2 hours, 555 answered 2xx |
+| EP099 | Probing | `amf-01` → `Npcf_PolicyAuthorization` `POST /app-sessions`: 338 calls in 3 hours, 306 refused with 403, token issued for `Nausf_UEAuthentication` |
+| EP039 | Low-and-slow, enforcement gap | `amf-01` → `Nudm_EventExposure` `POST /{ueIdentity}/subscriptions`: 42 calls in 3 hours (14 per hour), 41 answered 2xx, token issued for `Nausf_UEAuthentication` |
+| EP036 | Low-and-slow, probing | `smf-03` → `Nudm_EventExposure`: 33 calls in 6 hours, 30 refused with 403 |
 
 ### Benign changes generated on purpose
 
