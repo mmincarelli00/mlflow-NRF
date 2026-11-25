@@ -395,6 +395,10 @@ The field descriptions in this section refer to these elements by their exact na
 
 Orchestrator events are written for: initial registrations, autoscale and NEF go-live, rolling upgrades, slice launches, DR failover and failback, 70 % of certificate rotations, feature trials and remediations. Routine updates, NRF restarts, pod reschedules and attacks have none.
 
+**What "70 % of certificate rotations" means.** For each of the 15 simulated certificate rotations, `normal_events()` writes the NRF event (an `UPDATE` with a new certificate fingerprint and no changed profile fields) and then adds an orchestrator record only with probability 0.7 (`if rng.random() < 0.7: self.add_change(h, iid)`). About 10 rotations therefore have a matching change record and about 5 have none. The figure is a modelling assumption, not taken from 3GPP or from real data: certificate renewal is often fully automated, by the NF's PKI client (3GPP uses CMPv2, TS 33.310) or by a tool such as Kubernetes cert-manager, so in a real network the change feed explains most rotations, but not all.
+
+With the current features, this has **no effect on the models**. A rotation changes no profile field, so its `diff_risk_score` is 0 and it is not a *material* change; `NRF_features.py` only checks orchestrator matches for material changes and sets `orch_event_matched = 1` otherwise. Rotations do raise `second_source_for_id`, because the fingerprint changes, which is why they are a benign look-alike. Treating a certificate change as material would make the unorchestrated 30 % look suspicious and turn them into harder benign cases; this is not implemented.
+
 #### `nrf_events.csv`
 
 One row per NRF registration (E1) or update (E2), written by `ev()` or by `legit_ev()`, which fills in the instance's legitimate identity from the *Instance catalogue*. Rows are sorted by time.
