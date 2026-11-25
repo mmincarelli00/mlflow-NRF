@@ -387,7 +387,7 @@ The field descriptions in this section refer to these elements by their exact na
 |---|---|---|
 | `change_id` | Change record identifier | `C00001`, `C00002`… from a counter in `add_change()`; `M<hour>` for *Maintenance windows* |
 | `kind` | `orchestrator_event` or `maintenance_window` | `add_change()` writes orchestrator events; `run()` adds one record per *Maintenance windows* slot (Tuesday and Thursday) |
-| `nf_instance_id` | Instance concerned | The instance of the planned change; `*` for *Maintenance windows* |
+| `nf_instance_id` | Instance concerned | The instance of the planned change; `*` for *Maintenance windows*, meaning "applies to all instances" |
 | `ts_start` | Start of the change | Orchestrator events: event time minus a lag of 0–4 minutes (8 % of them 12–40 minutes, the late events); *Maintenance windows*: 01:00 |
 | `ts_end` | End of the change | Orchestrator events: event time + 1 minute; *Maintenance windows*: 05:00 |
 | `approved_edges` | New call edges declared by the change, as `consumer\|service\|operation`, separated by `;` | Filled only for the two NEF go-live records, from `EDGES["NEF"]`; empty otherwise |
