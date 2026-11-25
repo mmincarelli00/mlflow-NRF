@@ -406,7 +406,8 @@ class Simulator:
             h = self.maint_time(self.base_h + 12, self.H - 6)
             cands = [i for i in self.live(h, {"base", "autoscale"}) if i["type"] in ("AMF", "SMF", "UDM", "PCF")]
             inst = cands[int(rng.integers(len(cands)))]
-            path = "/amfInfo/taiList" if inst["type"] == "AMF" else "/smfInfo/sNssaiSmfInfoList"
+            # AMF: adds tracking areas; SMF: adds slices to smfInfo; UDM and PCF: add slices to their own sNssais list
+            path = {"AMF": "/amfInfo/taiList", "SMF": "/smfInfo/sNssaiSmfInfoList"}.get(inst["type"], "/sNssais")
             self.legit_ev(inst, h, "UPDATE", path, ranges=int(rng.integers(1, 4)), allow=int(rng.integers(0, 2)))
             self.add_change(h, inst["id"])
             self.mark(inst["id"], int(h), int(h) + 1, 0, "benign_slice_launch")

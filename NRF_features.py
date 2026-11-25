@@ -152,7 +152,7 @@ FIELD_RISK = {
     "*new*": 6.0, "/load": 0.1, "/capacity": 0.5, "/priority": 1.0, "/heartBeatTimer": 1.0,
     "/supportedFeatures": 1.0, "/nfServices": 2.0, "/fqdn": 5.0, "/ipv4Addresses": 5.0,
     "/nfServiceEndpoints": 5.0, "/udmInfo/supiRanges": 4.0, "/amfInfo/taiList": 2.0,
-    "/smfInfo/sNssaiSmfInfoList": 2.0, "/allowedNfTypes": 4.0, "/allowedNssais": 4.0,
+    "/smfInfo/sNssaiSmfInfoList": 2.0, "/sNssais": 2.0, "/allowedNfTypes": 4.0, "/allowedNssais": 4.0,
     "/allowedOperationsPerNfType": 4.0,
 }
 SECOND_SOURCE_HOLD_H = 6      # "second source" stays raised for N windows (24 h in production)
