@@ -417,7 +417,7 @@ With the current features, this has **no effect on the models**. A rotation chan
 | `event_type` | `REGISTER` (E1) or `UPDATE` (E2) | Set by each scenario |
 | `nf_type` | Type in the registered profile | The instance's type |
 | `src_ip` | Source IP of the connection (E8) | Legitimate events: the registered IP (the DR IP during a failover); pod reschedules: a new pod address `10.{10+t}.1.x`; attacks: a foreign address `10.200–249.x.x`, or the DR IP for stealth hijacks |
-| `cert_san` | Name in the client certificate (E8) | Legitimate events: the instance's FQDN; attacks: the registered FQDN or a wrong name (`localhost`, `nrf.internal`, `pod-7f3a`) |
+| `cert_san` | Name in the client certificate (E8) | SAN stands for Subject Alternative Name, a standard X.509 certificate field indicating that the certificate is valid for the listed DNS names, IP addresses or URIs. Legitimate events: the instance's FQDN; attacks: the registered FQDN or a wrong name (`localhost`, `nrf.internal`, `pod-7f3a`) |
 | `cert_fp` | Certificate fingerprint (E8) | *Fingerprints*: legitimate events use `fp_at()`, the original `_hex(id)` replaced after each scheduled rotation; attacks use a new hash (`_hex(id + "dup")`, `_hex(id + "hj")`, `_hex(id + "x" + episode)`) or the stolen real fingerprint (stealth hijacks, 70 % of other hijacks) |
 | `profile_fqdn`, `profile_ip` | Address registered in the profile | Legitimate events: the instance's own; attacks: `<id>.lab.example.net`, look-alike FQDNs (`5gc-b`, `5gc-x`), foreign IPs, or the reserved ID's approved address |
 | `priority`, `capacity` | Selection attributes | 10 and 100 for every event, except rogue impostors and duplicate IDs: 1 and 65000, to win discovery |
