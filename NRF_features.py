@@ -151,7 +151,8 @@ RISK_COLS = [
 FIELD_RISK = {
     "*new*": 6.0, "/load": 0.1, "/capacity": 0.5, "/priority": 1.0, "/heartBeatTimer": 1.0,
     "/supportedFeatures": 1.0, "/nfServices": 2.0, "/fqdn": 5.0, "/ipv4Addresses": 5.0,
-    "/nfServiceEndpoints": 5.0, "/udmInfo/supiRanges": 4.0, "/amfInfo/taiList": 2.0,
+    "/nfServiceEndpoints": 5.0, "/udmInfo/supiRanges": 4.0, "/udrInfo/supiRanges": 4.0,
+    "/ausfInfo/supiRanges": 4.0, "/pcfInfo/supiRangeList": 4.0, "/amfInfo/taiList": 2.0,
     "/smfInfo/sNssaiSmfInfoList": 2.0, "/sNssais": 2.0, "/allowedNfTypes": 4.0, "/allowedNssais": 4.0,
     "/allowedOperationsPerNfType": 4.0,
 }

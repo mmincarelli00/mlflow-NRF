@@ -555,7 +555,10 @@ class Simulator:
         rng = self.rng
         prod = self._pick(busy, hrs, types={"UDM", "UDR", "AUSF", "PCF"})
         ranges = int(rng.integers(1, 4)) if rng.random() < 0.5 else 0
-        path = "/allowedNfTypes" + (";/udmInfo/supiRanges" if ranges else "")
+        # each producer type adds subscriber ranges to its own profile section (TS 29.510)
+        range_path = {"UDM": "/udmInfo/supiRanges", "UDR": "/udrInfo/supiRanges", "AUSF": "/ausfInfo/supiRanges",
+                      "PCF": "/pcfInfo/supiRangeList"}[prod["type"]]
+        path = "/allowedNfTypes" + (";" + range_path if ranges else "")
         self.legit_ev(prod, t, "UPDATE", path, ranges=ranges, allow=int(rng.integers(1, 5)))
         self.mark(prod["id"], hrs[0], hrs[0] + 1, 1, "privilege_widening", ep)
         services = [s for s, p in SERVICE_PRODUCER.items() if p == prod["type"]]
