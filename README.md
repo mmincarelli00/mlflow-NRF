@@ -365,6 +365,8 @@ The field descriptions in this section refer to these elements by their exact na
 
 #### `inventory.csv`
 
+**What it is:** the list of NF instances the operator has approved, playing the role of the OSS resource inventory: one row per approved NF instance (45 rows: 40 deployed and 5 reserved IDs that are never deployed).
+
 | Field | Meaning | How it is generated |
 |---|---|---|
 | `nf_instance_id` | Instance identifier; stands in for the 3GPP `nfInstanceId` (a UUID in a real network) | *Instance catalogue* (`_mk()`): NF type in lower case plus a two-digit number, e.g. `amf-03` |
@@ -376,12 +378,16 @@ The field descriptions in this section refer to these elements by their exact na
 
 #### `policy_matrix.csv`
 
+**What it is:** the access policy, i.e. which consumer NF types are allowed to call each service: one row per (service, allowed consumer type) pair (15 rows).
+
 | Field | Meaning | How it is generated |
 |---|---|---|
 | `service` | A producer service, e.g. `Nudm_SDM` | Every service that appears in `EDGES` |
 | `allowed_consumer_type` | One NF type allowed to call it | At import, `ALLOWED` collects, for each service, the consumer types that call it in `EDGES`; `run()` writes one row per (service, consumer type) pair |
 
 #### `change_feed.csv`
+
+**What it is:** the record of planned changes: one row per orchestrator event or maintenance window (193 rows: 180 orchestrator events and 13 maintenance windows). It lets the features tell whether an NRF change was expected.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
@@ -401,7 +407,7 @@ With the current features, this has **no effect on the models**. A rotation chan
 
 #### `nrf_events.csv`
 
-One row per NRF registration (E1) or update (E2), written by `ev()` or by `legit_ev()`, which fills in the instance's legitimate identity from the *Instance catalogue*. Rows are sorted by time.
+**What it is:** the NRF's log of profile changes: one row per NF registration (E1) or profile update (E2) received by the NRF, with the TLS identity of the connection (E8); 1,647 rows (258 `REGISTER`, 1,389 `UPDATE`). Rows are written by `ev()` or by `legit_ev()`, which fills in the instance's legitimate identity from the *Instance catalogue*, and are sorted by time.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
@@ -421,7 +427,7 @@ One row per NRF registration (E1) or update (E2), written by `ev()` or by `legit
 
 #### `post_register_traffic.csv`
 
-One row per `REGISTER` event, written by `add_post()`. `UPDATE` events (hijack, privilege widening) have none.
+**What it is:** what happened right after each registration: one row per `REGISTER` event (258 rows), with the time until the first request reached the new instance and its share of its NF type's traffic in the first 10 minutes. Written by `add_post()`; `UPDATE` events (hijack, privilege widening) have none.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
@@ -434,7 +440,7 @@ One row per `REGISTER` event, written by `add_post()`. `UPDATE` events (hijack, 
 
 #### `token_requests.csv`
 
-Hourly counts of access token requests (E7), written by `add_tokens()`. An instance-hour can have several rows (for example normal and attacker rows for a reused ID); `NRF_features.py` sums them.
+**What it is:** the access-token activity at the NRF: one row per consumer instance per hour (27,051 rows), with the number of token requests (E7) and how many claimed an identity different from the TLS certificate (E8). Written by `add_tokens()`. An instance-hour can have several rows (for example normal and attacker rows for a reused ID); `NRF_features.py` sums them.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
@@ -445,7 +451,7 @@ Hourly counts of access token requests (E7), written by `add_tokens()`. An insta
 
 #### `sbi_calls.csv`
 
-Hourly roll-ups of SBI calls (E9) per consumer instance and edge, written by `add_calls()`.
+**What it is:** the NF-to-NF service calls seen by the SCP: one row per hour, consumer instance, call edge and token scope (85,654 rows), with call counts by response status (E9). Written by `add_calls()`.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
@@ -460,6 +466,8 @@ Hourly roll-ups of SBI calls (E9) per consumer instance and edge, written by `ad
 
 #### `producer_load.csv`
 
+**What it is:** the traffic received by each NF: one row per live NF instance per hour (38,747 rows). These rows also define the instance-hours on which the features and models are computed.
+
 | Field | Meaning | How it is generated |
 |---|---|---|
 | `window_start` | Hour | *Hourly windows* from the instance's `live_from` to the end |
@@ -467,6 +475,8 @@ Hourly roll-ups of SBI calls (E9) per consumer instance and edge, written by `ad
 | `n_requests_received` | Requests received in the hour | `add_load()`: Poisson(`PRODUCER_LOAD[type]` × *Day/night curve* × *Ramp-up* × *Random noise*); impostors × 0.1 (stealth or reserved) or × 0.4 (noisy). These rows define the instance-hours scored by the models. |
 
 #### `labels.csv`
+
+**What it is:** the ground truth: one row per instance-hour that is not plain normal (844 rows: 453 anomalous hours and 391 benign-change hours). It is used only to train and score the models, never as a model input.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
@@ -479,6 +489,8 @@ Plain normal hours are not written: any instance-hour missing from this file is 
 
 #### `episodes.csv`
 
+**What it is:** the list of injected attacks: one row per anomaly episode (110 rows). It is used to measure how many attacks were caught, not just how many hours.
+
 | Field | Meaning | How it is generated |
 |---|---|---|
 | `episode_id` | Episode identifier | `EP000` to `EP109`, numbered in the order of their drawn start times |
@@ -486,6 +498,8 @@ Plain normal hours are not written: any instance-hour missing from this file is 
 | `start_window` | Hour the episode starts | Uniform between the baseline end + 6 h and 14 h before the end; 25 % of impostor, duplicate-ID and privilege-widening episodes are moved into nearby *Maintenance windows*. Each episode lasts 2–6 hours. |
 
 #### `meta.json`
+
+**What it is:** a small JSON file describing the dataset: when it starts, how long it is and how long the clean baseline is. `NRF_features.py` reads it to know where the baseline ends and how to split the data in time.
 
 | Field | Meaning | How it is generated |
 |---|---|---|
